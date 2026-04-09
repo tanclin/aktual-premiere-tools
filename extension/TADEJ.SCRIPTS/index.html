@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Tadej Scripts</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+
+    <h2>AKTUAL TOOLS</h2>
+    <hr>
+    <h3></h3>  
+   <!--     <button id="mainBtn" onclick="run()">CREATE SEQUENCES</button> -->
+    <button id="orgBtn" onclick="runOrganize()">ORG FOLDERS</button>
+
+
+    <!-- 🔥 GRID ZA TV / FB / STORY -->
+    <hr>
+    <h3>RENAMING</h3>  
+
+    <div class="row">
+        <button onclick="renameSeq('TV')">TV</button>
+        <button onclick="renameSeq('FB')">FB</button>
+        <button onclick="renameSeq('STORY')">STORY</button>
+    </div>
+    <hr>
+    <div id="log"></div>
+
+
+
+<!-- 🔥 FOOTER 🔥 -->
+<!--<footer class="bottom"><p><a href="https://mail.google.com/mail/u/0/?fs=1&amp;to=anclintadej@gmail.com&amp;tf=cm" target="_blank" rel="noopener noreferrer">Anclin Tadej</a><br>© 2026 Aktual</p></footer> -->
+<button onclick="openUpdate()">UPDATE</button>
+
+
+
+    <script src="lib/CSInterface.js"></script>
+    <script>
+
+        var cs = new CSInterface();
+
+        function log(msg, type="info") {
+            var el = document.getElementById("log");
+            el.innerText = msg;
+            el.className = type;
+        }
+
+        function setLoading(btnId, state, text) {
+            var btn = document.getElementById(btnId);
+
+            if (state) {
+                btn.disabled = true;
+                btn.innerText = text || "PROCESSING...";
+            } else {
+                btn.disabled = false;
+                btn.innerText = btnId === "mainBtn"
+                    ? "CREATE SEQUENCES"
+                    : "ORG FOLDERS";
+            }
+        }
+
+        function openUpdate() {
+    window.open("https://github.com/USERNAME/REPO/releases");
+}
+
+        function loadJSX() {
+            try {
+                var path = cs.getSystemPath(SystemPath.EXTENSION);
+                path = path.replace(/\\/g, "/");
+
+                var jsxPath = path + "/assets/jsx/host.jsx";
+
+                cs.evalScript('$.evalFile("' + jsxPath + '")', function(res){
+                    log("🟢 JSX READY", "success");
+                });
+
+            } catch (e) {
+                log("❌ LOAD ERROR: " + e, "error");
+            }
+        }
+
+        function run() {
+
+            setLoading("mainBtn", true);
+            log("Running...", "info");
+
+            cs.evalScript('typeof createBacksellSequences', function(res){
+
+                if (res !== "function") {
+                    log("❌ JSX NOT LOADED", "error");
+                    setLoading("mainBtn", false);
+                    return;
+                }
+
+                cs.evalScript("createBacksellSequences()", function(res){
+
+                    if (res && res.indexOf("❌") !== -1) {
+                        log(res, "error");
+                    } else {
+                        log(res, "success");
+                    }
+
+                    setLoading("mainBtn", false);
+
+                });
+
+            });
+        }
+
+        function renameSeq(type) {
+
+    log("Renaming " + type + "...", "info");
+
+    cs.evalScript('renameSelectedSequence("' + type + '")', function(res){
+
+        if (res && res.indexOf("❌") !== -1) {
+            log(res, "error");
+        } else {
+            log(res, "success");
+        }
+
+    });
+        }
+
+        function runTimecode() {
+
+            setLoading("tcBtn", true);
+            log("Setting timecode...", "info");
+
+            cs.evalScript("setTimecodeFromFilename()", function(res){
+
+                if (res && res.indexOf("❌") !== -1) {
+                    log(res, "error");
+                } else {
+                    log(res, "success");
+                }
+
+                setLoading("tcBtn", false);
+
+            });
+        }
+
+        function runOrganize() {
+
+    setLoading("orgBtn", true);
+    log("Organizing project...", "info");
+
+    cs.evalScript("organizeProject()", function(res){
+
+        if (res && res.indexOf("❌") !== -1) {
+            log(res, "error");
+        } else {
+            log(res, "success");
+        }
+
+        setLoading("orgBtn", false);
+
+    });
+}
+
+        function checkForUpdates() {
+
+    fetch("https://raw.githubusercontent.com/USERNAME/REPO/main/version.json")
+        .then(r => r.json())
+        .then(data => {
+
+            var CURRENT = "1.0.0"; // ← spremeni ročno
+
+            if (data.version !== CURRENT) {
+                log("🆕 Update available: " + data.version, "info");
+            } else {
+                log("✔ Up to date", "success");
+            }
+
+        })
+        .catch(() => {
+            log("Update check failed", "error");
+        });
+}
+
+
+loadJSX();
+checkForUpdates();
+
+    </script>
+
+</body>
+</html>

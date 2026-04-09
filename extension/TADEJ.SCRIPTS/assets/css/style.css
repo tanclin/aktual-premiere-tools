@@ -1,0 +1,126 @@
+body {
+    background: #1e1e1e;
+    color: white;
+    font-family: Arial, sans-serif;
+    padding: 10px;
+}
+
+/* 🔥 CENTERED TITLE */
+h2 {
+    font-size: 16px;
+    margin-bottom: 10px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+/* 🔥 CENTERED TITLE */
+h3 {
+    font-size: 13px;
+    margin-bottom: 10px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+
+/* 🔘 OSNOVNI BUTTON */
+button {
+    width: 100%;
+    padding: 12px;
+    background: #5DA32C;
+    border: none;
+    color: white;
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: background 0.2s ease, transform 0.1s ease;
+    margin-top: 12px;
+}
+
+/* hover za navadne gumbe */
+button:hover {
+    background: #75b847;
+}
+
+/* klik efekt */
+button:active {
+    transform: scale(0.97);
+}
+
+/* 🧪 DEBUG BOX */
+#log {
+    margin-top: 12px;
+    font-size: 9px;
+    padding: 8px;
+    border-radius: 4px;
+    background: #111;
+    min-height: 18px;
+}
+
+/* status colors */
+#log.success {
+    color: #4CAF50;
+}
+
+#log.error {
+    color: #ff4d4d;
+}
+
+#log.info {
+    color: #aaa;
+}
+
+/* 📦 3 gumbi v vrsti */
+.row {
+    display: flex;
+    gap: 6px;
+}
+
+/* override za row gumbe */
+.row button {
+    flex: 1;
+    margin-top: 0; /* da niso razmaknjeni dol */
+    background: #DD8541;
+}
+
+/* hover SAMO za row gumbe */
+.row button:hover {
+    background: #EE944F;
+}
+
+/* klik efekt za row gumbe */
+.row button:active {
+    transform: scale(0.95);
+}
+
+hr {
+    border: none;
+    height: 1px;
+    background-color: #6a6a6a;
+}
+
+footer {
+  padding: 20px;
+  text-align: center;
+    font-size: 12px;
+}
+
+footer a {
+  color: #20aeff;
+  text-decoration: none;
+    font-size: 11px;
+}
+
+.bottom {
+  footer& {
+    margin-top: auto;
+    position: fixed;
+    bottom: 0px;
+    left: 0px;
+    width: 100%;
+    height: 60px;
+    margin: 0px;
+    border-top: 1px solid rgb(204, 204, 204);
+    display: flex;
+    align-items: center ;
+    justify-content: center;
+  }
+}

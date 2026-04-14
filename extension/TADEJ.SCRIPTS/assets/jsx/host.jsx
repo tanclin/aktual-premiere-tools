@@ -339,7 +339,19 @@ function organizeProject() {
         }
 
         function isBin(item) {
-            return item && item.type === ProjectItemType.BIN;
+            if (!item) {
+                return false;
+            }
+
+            if (item.type === "BIN") {
+                return true;
+            }
+
+            if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
+                return true;
+            }
+
+            return false;
         }
 
         function isSequenceItem(item) {
@@ -474,7 +486,19 @@ function removeEmptyProjectBins() {
         var removedEmptyBins = 0;
 
         function isBin(item) {
-            return item && item.type === ProjectItemType.BIN;
+            if (!item) {
+                return false;
+            }
+
+            if (item.type === "BIN") {
+                return true;
+            }
+
+            if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
+                return true;
+            }
+
+            return false;
         }
 
         function collectEmptyBins(bin, emptyBins) {

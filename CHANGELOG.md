@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.3.2 - fix
+
+- Fixed bin detection to use Premiere's string-based project item type (`\"BIN\"`) with enum fallback, so cleanup and recursive sequence scanning can actually see bins reliably.
+
 ## 1.3.1 - fix
 
 - Backtracked the empty-bin cleanup issue.

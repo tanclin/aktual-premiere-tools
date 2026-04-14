@@ -310,6 +310,34 @@ function renameSelectedSequence(prefix) {
     }
 }
 
+function projectItemHasChildren(item) {
+    try {
+        return item && item.children && typeof item.children.numItems !== "undefined";
+    } catch (e) {
+        return false;
+    }
+}
+
+function isBinLikeItem(item) {
+    if (!item) {
+        return false;
+    }
+
+    try {
+        if (item.type === "BIN" || item.type === "ROOT") {
+            return true;
+        }
+    } catch (e) {}
+
+    try {
+        if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
+            return true;
+        }
+    } catch (e) {}
+
+    return projectItemHasChildren(item);
+}
+
 function organizeProject() {
     try {
         var project = app.project;
@@ -338,28 +366,12 @@ function organizeProject() {
             return parent.createBin(name);
         }
 
-        function isBin(item) {
-            if (!item) {
-                return false;
-            }
-
-            if (item.type === "BIN") {
-                return true;
-            }
-
-            if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
-                return true;
-            }
-
-            return false;
-        }
-
         function isSequenceItem(item) {
             return item && item.isSequence && item.isSequence();
         }
 
         function binNameContainsSekvence(item) {
-            return isBin(item) && item.name && item.name.toLowerCase().indexOf("sekvence") !== -1;
+            return isBinLikeItem(item) && item.name && item.name.toLowerCase().indexOf("sekvence") !== -1;
         }
 
         function getParentBin(item) {
@@ -377,7 +389,7 @@ function organizeProject() {
         }
 
         function processItem(item) {
-            if (isBin(item)) {
+            if (isBinLikeItem(item)) {
                 walkBin(item);
                 return;
             }
@@ -397,7 +409,7 @@ function organizeProject() {
         }
 
         function walkBin(bin) {
-            if (!isBin(bin)) {
+            if (!isBinLikeItem(bin)) {
                 return;
             }
 
@@ -413,7 +425,7 @@ function organizeProject() {
         }
 
         function organizeRootItem(item) {
-            if (!item || isBin(item) || isSequenceItem(item)) {
+            if (!item || isBinLikeItem(item) || isSequenceItem(item)) {
                 return;
             }
 
@@ -485,37 +497,21 @@ function removeEmptyProjectBins() {
         var root = project.rootItem;
         var removedEmptyBins = 0;
 
-        function isBin(item) {
-            if (!item) {
-                return false;
-            }
-
-            if (item.type === "BIN") {
-                return true;
-            }
-
-            if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
-                return true;
-            }
-
-            return false;
-        }
-
         function collectEmptyBins(bin, emptyBins) {
-            if (!isBin(bin)) {
+            if (!isBinLikeItem(bin)) {
                 return;
             }
 
             for (var i = bin.children.numItems - 1; i >= 0; i--) {
                 var child = bin.children[i];
 
-                if (!isBin(child)) {
+                if (!isBinLikeItem(child)) {
                     continue;
                 }
 
                 collectEmptyBins(child, emptyBins);
 
-                if (child.children.numItems === 0) {
+                if (projectItemHasChildren(child) && child.children.numItems === 0) {
                     emptyBins.push(child);
                 }
             }
@@ -565,37 +561,21 @@ function deleteNamedBin() {
         var deletedBins = 0;
         var blockedBins = 0;
 
-        function isBin(item) {
-            if (!item) {
-                return false;
-            }
-
-            if (item.type === "BIN") {
-                return true;
-            }
-
-            if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
-                return true;
-            }
-
-            return false;
-        }
-
         function collectMatchingBins(bin) {
-            if (!isBin(bin)) {
+            if (!isBinLikeItem(bin)) {
                 return;
             }
 
             for (var i = 0; i < bin.children.numItems; i++) {
                 var child = bin.children[i];
 
-                if (!isBin(child)) {
+                if (!isBinLikeItem(child)) {
                     continue;
                 }
 
                 collectMatchingBins(child);
 
-                if (child.name && child.name.toLowerCase() === "bin") {
+                if (child.name && child.name.toLowerCase().replace(/^\s+|\s+$/g, "") === "bin") {
                     matchingBins.push(child);
                 }
             }

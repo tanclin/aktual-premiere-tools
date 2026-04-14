@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1 - fix
+
+- Reworked ORG, empty-bin cleanup, and test-bin deletion to traverse any project item with a `children` collection, making folder detection more robust across Premiere builds.
+
 ## 1.4.0 - feature
 
 - Added a new test `BIN` button next to `🪄` that searches for bins named `bin` and tries to delete them directly.

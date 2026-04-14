@@ -9,59 +9,67 @@
 
     <h2>AKTUAL TOOLS</h2>
     <hr>
-    <h3></h3>  
-   <!--     <button id="mainBtn" onclick="run()">CREATE SEQUENCES</button> -->
-    <button id="orgBtn" onclick="runOrganize()">ORG FOLDERS</button>
 
+    <div class="tool-row">
+        <button id="orgBtn" onclick="runOrganize()">ORG FOLDERS</button>
+        <button id="cleanupBtn" class="mini-btn" onclick="runCleanup()">🪄</button>
+    </div>
 
-    <!-- 🔥 GRID ZA TV / FB / STORY -->
     <hr>
-    <h3>RENAMING</h3>  
+    <h3>RENAMING</h3>
 
     <div class="row">
         <button onclick="renameSeq('TV')">TV</button>
         <button onclick="renameSeq('FB')">FB</button>
         <button onclick="renameSeq('STORY')">STORY</button>
     </div>
+
+    <hr>
+    <div class="live-stat">
+        <div id="selectionDuration">0 selected items Duration: 00:00:00:00</div>
+        <div class="meter-shell">
+            <div id="durationMeter" class="meter-fill"></div>
+        </div>
+    </div>
     <hr>
     <div id="log"></div>
 
-
-
-<!-- 🔥 FOOTER 🔥 -->
-<!--<footer class="bottom"><p><a href="https://mail.google.com/mail/u/0/?fs=1&amp;to=anclintadej@gmail.com&amp;tf=cm" target="_blank" rel="noopener noreferrer">Anclin Tadej</a><br>© 2026 Aktual</p></footer> -->
-<button onclick="openUpdate()">UPDATE</button>
-
-
-
+    <div class="footer">
+        <div id="versionStatus">Version: loading...</div>
+        <button id="updateBtn" onclick="runInstaller()">UPDATE</button>
+    </div>
     <script src="lib/CSInterface.js"></script>
     <script>
 
         var cs = new CSInterface();
 
-        function log(msg, type="info") {
+        var CURRENT_VERSION = "1.3.0";
+        var lastSelectionDuration = null;
+        var TICKS_PER_SECOND = 254016000000;
+        var SERVER_VERSION = null;
+
+        function log(msg, type) {
             var el = document.getElementById("log");
             el.innerText = msg;
-            el.className = type;
+            el.className = type || "info";
         }
 
-        function setLoading(btnId, state, text) {
+        function setLoading(btnId, state) {
             var btn = document.getElementById(btnId);
 
             if (state) {
                 btn.disabled = true;
-                btn.innerText = text || "PROCESSING...";
+                btn.innerText = "PROCESSING...";
             } else {
                 btn.disabled = false;
-                btn.innerText = btnId === "mainBtn"
-                    ? "CREATE SEQUENCES"
-                    : "ORG FOLDERS";
+
+                if (btnId === "orgBtn") {
+                    btn.innerText = "ORG FOLDERS";
+                } else if (btnId === "cleanupBtn") {
+                    btn.innerText = "🪄";
+                }
             }
         }
-
-        function openUpdate() {
-    window.open("https://github.com/USERNAME/REPO/releases");
-}
 
         function loadJSX() {
             try {
@@ -70,117 +78,193 @@
 
                 var jsxPath = path + "/assets/jsx/host.jsx";
 
-                cs.evalScript('$.evalFile("' + jsxPath + '")', function(res){
-                    log("🟢 JSX READY", "success");
+                cs.evalScript('$.evalFile("' + jsxPath + '")', function () {
+                    log("JSX READY", "success");
                 });
-
             } catch (e) {
-                log("❌ LOAD ERROR: " + e, "error");
+                log("LOAD ERROR: " + e, "error");
             }
         }
 
-        function run() {
+        function runOrganize() {
+            setLoading("orgBtn", true);
+            log("Organizing...", "info");
 
-            setLoading("mainBtn", true);
-            log("Running...", "info");
+            cs.evalScript("organizeProject()", function (res) {
+                log(res, res && res.indexOf("ERROR") !== -1 ? "error" : "success");
+                setLoading("orgBtn", false);
+            });
+        }
 
-            cs.evalScript('typeof createBacksellSequences', function(res){
+        function runCleanup() {
+            setLoading("cleanupBtn", true);
+            log("Cleaning empty bins...", "info");
 
-                if (res !== "function") {
-                    log("❌ JSX NOT LOADED", "error");
-                    setLoading("mainBtn", false);
-                    return;
-                }
-
-                cs.evalScript("createBacksellSequences()", function(res){
-
-                    if (res && res.indexOf("❌") !== -1) {
-                        log(res, "error");
-                    } else {
-                        log(res, "success");
-                    }
-
-                    setLoading("mainBtn", false);
-
-                });
-
+            cs.evalScript("removeEmptyProjectBins()", function (res) {
+                log(res, res && res.indexOf("ERROR") !== -1 ? "error" : "success");
+                setLoading("cleanupBtn", false);
             });
         }
 
         function renameSeq(type) {
+            log("Renaming " + type + "...", "info");
 
-    log("Renaming " + type + "...", "info");
-
-    cs.evalScript('renameSelectedSequence("' + type + '")', function(res){
-
-        if (res && res.indexOf("❌") !== -1) {
-            log(res, "error");
-        } else {
-            log(res, "success");
-        }
-
-    });
-        }
-
-        function runTimecode() {
-
-            setLoading("tcBtn", true);
-            log("Setting timecode...", "info");
-
-            cs.evalScript("setTimecodeFromFilename()", function(res){
-
-                if (res && res.indexOf("❌") !== -1) {
-                    log(res, "error");
-                } else {
-                    log(res, "success");
-                }
-
-                setLoading("tcBtn", false);
-
+            cs.evalScript('renameSelectedSequence("' + type + '")', function (res) {
+                log(res, res && res.indexOf("ERROR") !== -1 ? "error" : "success");
             });
         }
 
-        function runOrganize() {
+        function updateDurationMeter(totalTicks) {
+            var meter = document.getElementById("durationMeter");
+            var liveStat = document.querySelector(".live-stat");
+            var seconds = totalTicks / TICKS_PER_SECOND;
+            var maxSeconds = 135;
+            var progress = Math.min(seconds / maxSeconds, 1);
+            var meterClass = "meter-fill is-green";
 
-    setLoading("orgBtn", true);
-    log("Organizing project...", "info");
-
-    cs.evalScript("organizeProject()", function(res){
-
-        if (res && res.indexOf("❌") !== -1) {
-            log(res, "error");
-        } else {
-            log(res, "success");
-        }
-
-        setLoading("orgBtn", false);
-
-    });
-}
-
-        function checkForUpdates() {
-
-    fetch("https://raw.githubusercontent.com/USERNAME/REPO/main/version.json")
-        .then(r => r.json())
-        .then(data => {
-
-            var CURRENT = "1.0.0"; // ← spremeni ročno
-
-            if (data.version !== CURRENT) {
-                log("🆕 Update available: " + data.version, "info");
-            } else {
-                log("✔ Up to date", "success");
+            if (seconds > 135) {
+                meterClass = "meter-fill is-red";
+            } else if (seconds > 90) {
+                meterClass = "meter-fill is-orange";
+            } else if (seconds > 75) {
+                meterClass = "meter-fill is-yellow";
             }
 
-        })
-        .catch(() => {
-            log("Update check failed", "error");
-        });
-}
+            meter.className = meterClass;
+            meter.style.width = (progress * 100) + "%";
 
+            if (seconds > 150) {
+                liveStat.classList.add("danger-window");
+            } else {
+                liveStat.classList.remove("danger-window");
+            }
+        }
 
-loadJSX();
-checkForUpdates();
+        function updateSelectionDuration() {
+            cs.evalScript("getSelectedVideoDurationSummary()", function (res) {
+                if (!res || res === "EvalScript error.") {
+                    return;
+                }
+
+                var data = null;
+
+                try {
+                    data = JSON.parse(res);
+                } catch (e) {
+                    data = {
+                        label: res,
+                        totalTicks: 0
+                    };
+                }
+
+                if (data.label !== lastSelectionDuration) {
+                    document.getElementById("selectionDuration").innerText = data.label;
+                    lastSelectionDuration = data.label;
+                }
+
+                updateDurationMeter(Number(data.totalTicks) || 0);
+            });
+        }
+
+        function compareVersions(a, b) {
+            var aParts = String(a).split(".");
+            var bParts = String(b).split(".");
+            var maxLength = Math.max(aParts.length, bParts.length);
+
+            for (var i = 0; i < maxLength; i++) {
+                var aPart = parseInt(aParts[i] || "0", 10);
+                var bPart = parseInt(bParts[i] || "0", 10);
+
+                if (aPart > bPart) return 1;
+                if (aPart < bPart) return -1;
+            }
+
+            return 0;
+        }
+
+        function checkForUpdates() {
+            var url = "https://api.github.com/repos/tanclin/aktual-premiere-tools/contents/version.json?t=" + Date.now();
+            var xhr = new XMLHttpRequest();
+            var updateBtn = document.getElementById("updateBtn");
+
+            xhr.open("GET", url, true);
+
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) {
+                    return;
+                }
+
+                var el = document.getElementById("versionStatus");
+
+                if (xhr.status === 200 && xhr.responseText) {
+                    try {
+                        var json = JSON.parse(xhr.responseText);
+                        var content = atob(json.content.replace(/\n/g, ""));
+                        var data = JSON.parse(content);
+
+                        SERVER_VERSION = data.version;
+
+                        var comparison = compareVersions(CURRENT_VERSION, SERVER_VERSION);
+
+                        if (comparison < 0) {
+                            el.innerText = "v" + CURRENT_VERSION + " -> v" + SERVER_VERSION;
+                            el.className = "update";
+
+                            updateBtn.innerText = "UPDATE";
+                            updateBtn.style.background = "#ffcc00";
+                            updateBtn.style.color = "#000";
+                        } else if (comparison > 0) {
+                            el.innerText = "Local v" + CURRENT_VERSION + " ahead of GitHub v" + SERVER_VERSION + " - update git code";
+                            el.className = "dev";
+
+                            updateBtn.innerText = "GITHUB";
+                            updateBtn.style.background = "#444";
+                            updateBtn.style.color = "#fff";
+                        } else {
+                            el.innerText = "v" + CURRENT_VERSION + " OK";
+                            el.className = "ok";
+
+                            updateBtn.innerText = "UPDATE";
+                            updateBtn.style.background = "#444";
+                            updateBtn.style.color = "#fff";
+                        }
+                    } catch (e) {
+                        el.innerText = "Parse error";
+                        el.className = "error";
+                    }
+                } else {
+                    el.innerText = "Update failed (" + xhr.status + ")";
+                    el.className = "error";
+                }
+            };
+
+            xhr.send();
+        }
+
+        function runInstaller() {
+            var url = "https://github.com/tanclin/aktual-premiere-tools/releases/latest";
+
+            if (SERVER_VERSION && compareVersions(CURRENT_VERSION, SERVER_VERSION) > 0) {
+                url = "https://github.com/tanclin/aktual-premiere-tools";
+            }
+
+            try {
+                cs.openURLInDefaultBrowser(url);
+                log("Opening update page...", "info");
+            } catch (e) {
+                try {
+                    window.cep.util.openURLInDefaultBrowser(url);
+                    log("Opening (fallback)...", "info");
+                } catch (e2) {
+                    log("Open manually:\n" + url, "error");
+                }
+            }
+        }
+
+        loadJSX();
+        checkForUpdates();
+        updateSelectionDuration();
+        window.setInterval(updateSelectionDuration, 500);
 
     </script>
 

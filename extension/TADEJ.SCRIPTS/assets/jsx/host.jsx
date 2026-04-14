@@ -2,15 +2,12 @@ function createBacksellSequences() {
     try {
 
         if (!app || !app.project) {
-            return "❌ No project";
+            return "ERROR: No project";
         }
 
         var project = app.project;
         var projectName = project.name.replace(".prproj", "");
 
-        // =============================
-        // FIND BASE SEQUENCE
-        // =============================
         var baseSeq = null;
 
         for (var i = 0; i < project.sequences.numSequences; i++) {
@@ -21,18 +18,15 @@ function createBacksellSequences() {
         }
 
         if (!baseSeq) {
-            return "❌ Base sequence not found";
+            return "ERROR: Base sequence not found";
         }
 
-        // =============================
-        // BIN
-        // =============================
         var root = project.rootItem;
         var sekvenceBin = null;
 
-        for (var i = 0; i < root.children.numItems; i++) {
-            if (root.children[i].name === "SEKVENCE") {
-                sekvenceBin = root.children[i];
+        for (var j = 0; j < root.children.numItems; j++) {
+            if (root.children[j].name === "SEKVENCE") {
+                sekvenceBin = root.children[j];
                 break;
             }
         }
@@ -41,12 +35,9 @@ function createBacksellSequences() {
             sekvenceBin = root.createBin("SEKVENCE");
         }
 
-        // =============================
-        // FIND LAST COPY
-        // =============================
         function findLastCopy() {
-            for (var i = project.sequences.numSequences - 1; i >= 0; i--) {
-                var seq = project.sequences[i];
+            for (var index = project.sequences.numSequences - 1; index >= 0; index--) {
+                var seq = project.sequences[index];
                 if (seq.name.indexOf("Copy") !== -1) {
                     return seq;
                 }
@@ -54,58 +45,48 @@ function createBacksellSequences() {
             return null;
         }
 
-        // =============================
-        // DUPLICATE + RENAME
-        // =============================
-        function duplicateAndRename(baseSeq, newName) {
+        function duplicateAndRename(sourceSequence, newName) {
+            sourceSequence.clone();
 
-            baseSeq.clone();
+            var clonedSequence = findLastCopy();
+            if (!clonedSequence) return null;
 
-            var seq = findLastCopy();
-            if (!seq) return null;
-
-            for (var i = 0; i < 5; i++) {
+            for (var renameTry = 0; renameTry < 5; renameTry++) {
                 try {
-                    seq.projectItem.name = newName;
+                    clonedSequence.projectItem.name = newName;
                 } catch (e) {}
             }
 
             try {
-                seq.projectItem.moveBin(sekvenceBin);
+                clonedSequence.projectItem.moveBin(sekvenceBin);
             } catch (e) {}
 
-            return seq;
+            return clonedSequence;
         }
 
-        // =============================
-        // ENABLE ALL CLIPS (REAL FIX)
-        // =============================
         function enableAllClips(sequence) {
             try {
                 var tracks = sequence.videoTracks;
 
-                for (var t = 0; t < tracks.numTracks; t++) {
-                    var track = tracks[t];
+                for (var trackIndex = 0; trackIndex < tracks.numTracks; trackIndex++) {
+                    var track = tracks[trackIndex];
 
-                    for (var c = 0; c < track.clips.numItems; c++) {
-                        track.clips[c].setEnabled(true);
+                    for (var clipIndex = 0; clipIndex < track.clips.numItems; clipIndex++) {
+                        track.clips[clipIndex].setEnabled(true);
                     }
                 }
             } catch (e) {}
         }
 
-        // =============================
-        // DELETE WATERMARK
-        // =============================
         function deleteWatermark(sequence) {
             try {
                 var tracks = sequence.videoTracks;
 
-                for (var t = 0; t < tracks.numTracks; t++) {
-                    var track = tracks[t];
+                for (var trackIndex = 0; trackIndex < tracks.numTracks; trackIndex++) {
+                    var track = tracks[trackIndex];
 
-                    for (var c = track.clips.numItems - 1; c >= 0; c--) {
-                        var clip = track.clips[c];
+                    for (var clipIndex = track.clips.numItems - 1; clipIndex >= 0; clipIndex--) {
+                        var clip = track.clips[clipIndex];
 
                         if (clip.name.toLowerCase().indexOf("watermark") !== -1) {
                             clip.remove(0, 0);
@@ -115,18 +96,15 @@ function createBacksellSequences() {
             } catch (e) {}
         }
 
-        // =============================
-        // ENABLE WATERMARK (FB)
-        // =============================
         function enableWatermark(sequence) {
             try {
                 var tracks = sequence.videoTracks;
 
-                for (var t = 0; t < tracks.numTracks; t++) {
-                    var track = tracks[t];
+                for (var trackIndex = 0; trackIndex < tracks.numTracks; trackIndex++) {
+                    var track = tracks[trackIndex];
 
-                    for (var c = 0; c < track.clips.numItems; c++) {
-                        var clip = track.clips[c];
+                    for (var clipIndex = 0; clipIndex < track.clips.numItems; clipIndex++) {
+                        var clip = track.clips[clipIndex];
 
                         if (clip.name.toLowerCase().indexOf("watermark") !== -1) {
                             clip.setEnabled(true);
@@ -136,34 +114,24 @@ function createBacksellSequences() {
             } catch (e) {}
         }
 
-        // =============================
-        // TV → DELETE watermark
-        // =============================
         var tvSeq = duplicateAndRename(baseSeq, "TV " + projectName);
-        if (!tvSeq) return "❌ TV failed";
+        if (!tvSeq) return "ERROR: TV failed";
 
         enableAllClips(tvSeq);
         deleteWatermark(tvSeq);
 
-        // =============================
-        // FB → KEEP + FORCE ENABLE
-        // =============================
         var fbSeq = duplicateAndRename(baseSeq, "FB " + projectName);
-        if (!fbSeq) return "❌ FB failed";
+        if (!fbSeq) return "ERROR: FB failed";
 
         enableAllClips(fbSeq);
         enableWatermark(fbSeq);
 
-        // =============================
-        // STORY → DELETE watermark
-        // =============================
         var storySeq = duplicateAndRename(baseSeq, "STORY " + projectName);
-        if (!storySeq) return "❌ STORY failed";
+        if (!storySeq) return "ERROR: STORY failed";
 
         enableAllClips(storySeq);
         deleteWatermark(storySeq);
 
-        // resize (best effort)
         try {
             var settings = storySeq.getSettings();
             settings.videoFrameWidth = 608;
@@ -171,54 +139,188 @@ function createBacksellSequences() {
             storySeq.setSettings(settings);
         } catch (e) {}
 
-        return "✅ DONE:\nTV delete\nFB enabled\nSTORY delete";
+        return "DONE:\nTV delete\nFB enabled\nSTORY delete";
 
     } catch (e) {
-        return "❌ ERROR: " + e.toString();
+        return "ERROR: " + e.toString();
+    }
+}
+
+function getSelectedVideoDurationSummary() {
+    var TICKS_PER_SECOND = 254016000000;
+
+    function zeroPad(value, size) {
+        var text = String(value);
+        while (text.length < size) {
+            text = "0" + text;
+        }
+        return text;
+    }
+
+    function formatTimecodeFallback(totalTicks, ticksPerFrame) {
+        if (!ticksPerFrame || ticksPerFrame <= 0) {
+            return "00:00:00:00";
+        }
+
+        var totalFrames = Math.round(totalTicks / ticksPerFrame);
+        if (totalFrames < 0) {
+            totalFrames = 0;
+        }
+
+        var fps = Math.round(TICKS_PER_SECOND / ticksPerFrame);
+        if (fps <= 0) {
+            fps = 25;
+        }
+
+        var frames = totalFrames % fps;
+        var totalSeconds = Math.floor(totalFrames / fps);
+        var seconds = totalSeconds % 60;
+        var totalMinutes = Math.floor(totalSeconds / 60);
+        var minutes = totalMinutes % 60;
+        var hours = Math.floor(totalMinutes / 60);
+
+        return zeroPad(hours, 2) + ":" +
+            zeroPad(minutes, 2) + ":" +
+            zeroPad(seconds, 2) + ":" +
+            zeroPad(frames, 2);
+    }
+
+    try {
+        var project = app.project;
+        if (!project || !project.activeSequence) {
+            return '{"label":"0 selected items Duration: 00:00:00:00","totalTicks":0}';
+        }
+
+        var sequence = project.activeSequence;
+        var selection = sequence.getSelection();
+        if (!selection || !selection.length) {
+            return '{"label":"0 selected items Duration: 00:00:00:00","totalTicks":0}';
+        }
+
+        var totalTicks = 0;
+        var videoCount = 0;
+        var ticksPerFrame = Number(sequence.timebase);
+        var displayFormat = null;
+        var intervals = [];
+
+        try {
+            displayFormat = sequence.getSettings().videoDisplayFormat;
+        } catch (e) {}
+
+        for (var i = 0; i < selection.length; i++) {
+            var item = selection[i];
+            if (!item || item.mediaType !== "Video") {
+                continue;
+            }
+
+            var startTicks = 0;
+            var endTicks = 0;
+
+            try {
+                startTicks = Number(item.start.ticks);
+                endTicks = Number(item.end.ticks);
+            } catch (e) {
+                startTicks = 0;
+                endTicks = 0;
+            }
+
+            if (endTicks > startTicks) {
+                intervals.push({
+                    start: startTicks,
+                    end: endTicks
+                });
+                videoCount++;
+            }
+        }
+
+        if (videoCount === 0) {
+            return '{"label":"0 selected items Duration: 00:00:00:00","totalTicks":0}';
+        }
+
+        intervals.sort(function(a, b) {
+            return a.start - b.start;
+        });
+
+        var currentStart = intervals[0].start;
+        var currentEnd = intervals[0].end;
+
+        for (var j = 1; j < intervals.length; j++) {
+            var interval = intervals[j];
+
+            if (interval.start <= currentEnd) {
+                if (interval.end > currentEnd) {
+                    currentEnd = interval.end;
+                }
+            } else {
+                totalTicks += currentEnd - currentStart;
+                currentStart = interval.start;
+                currentEnd = interval.end;
+            }
+        }
+
+        totalTicks += currentEnd - currentStart;
+
+        var formattedDuration = null;
+
+        try {
+            if (displayFormat !== null && ticksPerFrame > 0) {
+                var totalTime = new Time();
+                totalTime.ticks = totalTicks;
+
+                var frameRate = new Time();
+                frameRate.ticks = ticksPerFrame;
+
+                formattedDuration = totalTime.getFormatted(frameRate, displayFormat);
+            }
+        } catch (e) {
+            formattedDuration = null;
+        }
+
+        if (!formattedDuration) {
+            formattedDuration = formatTimecodeFallback(totalTicks, ticksPerFrame);
+        }
+
+        return '{"label":"' + videoCount + ' selected items Duration: ' + formattedDuration + '","totalTicks":' + totalTicks + '}';
+    } catch (e) {
+        return '{"label":"0 selected items Duration: 00:00:00:00","totalTicks":0}';
     }
 }
 
 function renameSelectedSequence(prefix) {
     try {
-
         var project = app.project;
-        if (!project) return "❌ No project";
+        if (!project) return "ERROR: No project";
 
         var seq = project.activeSequence;
-        if (!seq) return "❌ No active sequence";
+        if (!seq) return "ERROR: No active sequence";
 
-        // project name clean
         var projectName = project.name.replace(".prproj", "");
-
         var newName = prefix + " " + projectName;
 
-        // 🔥 rename hack (da vedno prime)
         for (var i = 0; i < 5; i++) {
             try {
                 seq.projectItem.name = newName;
             } catch (e) {}
         }
 
-        return "✅ Renamed to:\n" + newName;
+        return "Renamed to:\n" + newName;
 
     } catch (e) {
-        return "❌ ERROR: " + e.toString();
+        return "ERROR: " + e.toString();
     }
 }
 
 function organizeProject() {
     try {
-
         var project = app.project;
-        if (!project) return "❌ No project";
+        if (!project) return "ERROR: No project";
 
         var root = project.rootItem;
-
-        // =============================
-        // CONFIG
-        // =============================
+        var movedSequences = 0;
+        var organizedRootItems = 0;
+        var sekvenceBinName = " SEKVENCE";
         var STRUCTURE = {
-            "SEKVENCE": {
+            " SEKVENCE": {
                 ".old": [],
                 ".precomps": []
             },
@@ -227,9 +329,6 @@ function organizeProject() {
             "FOOTAGE": ["mp4", "mov", "mxf", "avi"]
         };
 
-        // =============================
-        // CREATE BIN
-        // =============================
         function getOrCreateBin(parent, name) {
             for (var i = 0; i < parent.children.numItems; i++) {
                 if (parent.children[i].name === name) {
@@ -237,6 +336,97 @@ function organizeProject() {
                 }
             }
             return parent.createBin(name);
+        }
+
+        function isBin(item) {
+            return item && item.type === ProjectItemType.BIN;
+        }
+
+        function isSequenceItem(item) {
+            return item && item.isSequence && item.isSequence();
+        }
+
+        function binNameContainsSekvence(item) {
+            return isBin(item) && item.name && item.name.toLowerCase().indexOf("sekvence") !== -1;
+        }
+
+        function getParentBin(item) {
+            try {
+                if (item && item.getParent) {
+                    return item.getParent();
+                }
+            } catch (e) {}
+            return null;
+        }
+
+        function getExtension(name) {
+            var parts = name.split(".");
+            return parts.length > 1 ? parts.pop().toLowerCase() : "";
+        }
+
+        function processItem(item) {
+            if (isBin(item)) {
+                walkBin(item);
+                return;
+            }
+
+            if (!isSequenceItem(item)) {
+                return;
+            }
+
+            var parentBin = getParentBin(item);
+
+            if (!binNameContainsSekvence(parentBin)) {
+                try {
+                    item.moveBin(bins.sekvence);
+                    movedSequences++;
+                } catch (e) {}
+            }
+        }
+
+        function walkBin(bin) {
+            if (!isBin(bin)) {
+                return;
+            }
+
+            var children = [];
+
+            for (var i = 0; i < bin.children.numItems; i++) {
+                children.push(bin.children[i]);
+            }
+
+            for (var j = 0; j < children.length; j++) {
+                processItem(children[j]);
+            }
+        }
+
+        function organizeRootItem(item) {
+            if (!item || isBin(item) || isSequenceItem(item)) {
+                return;
+            }
+
+            var ext = getExtension(item.name || "");
+            if (!ext) {
+                return;
+            }
+
+            for (var key in STRUCTURE) {
+                var rule = STRUCTURE[key];
+
+                if (!(rule instanceof Array)) {
+                    continue;
+                }
+
+                for (var i = 0; i < rule.length; i++) {
+                    if (ext === rule[i]) {
+                        try {
+                            item.moveBin(bins[key]);
+                            organizedRootItems++;
+                        } catch (e) {}
+                        return;
+                    }
+                }
+            }
         }
 
         var bins = {};
@@ -252,63 +442,77 @@ function organizeProject() {
             }
         }
 
-        // =============================
-        // EXTENSION
-        // =============================
-        function getExtension(name) {
-            var parts = name.split(".");
-            return parts.length > 1 ? parts.pop().toLowerCase() : "";
+        bins.sekvence = bins[sekvenceBinName];
+
+        for (var itemIndex = root.children.numItems - 1; itemIndex >= 0; itemIndex--) {
+            processItem(root.children[itemIndex]);
         }
 
-        // =============================
-        // PROCESS ITEM
-        // =============================
-        function processItem(item) {
+        var rootItems = [];
 
-            if (item.type === ProjectItemType.BIN) return;
+        for (var rootIndex = 0; rootIndex < root.children.numItems; rootIndex++) {
+            rootItems.push(root.children[rootIndex]);
+        }
 
-            // 🔥 FIX 1: sequence detection
-            if (item.isSequence && item.isSequence()) {
-                item.moveBin(bins["SEKVENCE"]);
+        for (var rootItemIndex = 0; rootItemIndex < rootItems.length; rootItemIndex++) {
+            organizeRootItem(rootItems[rootItemIndex]);
+        }
+
+        return "Project organized\nMoved sequences: " + movedSequences + "\nOrganized root items: " + organizedRootItems;
+
+    } catch (e) {
+        return "ERROR: " + e.toString();
+    }
+}
+
+function removeEmptyProjectBins() {
+    try {
+        var project = app.project;
+        if (!project) return "ERROR: No project";
+
+        var root = project.rootItem;
+        var removedEmptyBins = 0;
+        var emptyBins = [];
+
+        function isBin(item) {
+            return item && item.type === ProjectItemType.BIN;
+        }
+
+        function collectEmptyBins(bin) {
+            if (!isBin(bin)) {
                 return;
             }
 
-            var name = item.name;
-            var ext = getExtension(name);
+            for (var i = bin.children.numItems - 1; i >= 0; i--) {
+                var child = bin.children[i];
 
-            // 🔥 FIX 2: no extension (Color Matte, adjustment layer, etc.)
-            if (!ext) {
-                item.moveBin(bins["ASSETS"]);
-                return;
-            }
+                if (!isBin(child)) {
+                    continue;
+                }
 
-            // NORMAL SORT
-            for (var key in STRUCTURE) {
+                collectEmptyBins(child);
 
-                var rule = STRUCTURE[key];
-
-                if (rule instanceof Array) {
-                    for (var i = 0; i < rule.length; i++) {
-                        if (ext === rule[i]) {
-                            item.moveBin(bins[key]);
-                            return;
-                        }
-                    }
+                if (child.children.numItems === 0) {
+                    emptyBins.push(child);
                 }
             }
         }
 
-        // =============================
-        // LOOP ROOT
-        // =============================
-        for (var i = root.children.numItems - 1; i >= 0; i--) {
-            processItem(root.children[i]);
+        collectEmptyBins(root);
+
+        for (var binIndex = 0; binIndex < emptyBins.length; binIndex++) {
+            try {
+                if (emptyBins[binIndex].deleteBin() === 0) {
+                    removedEmptyBins++;
+                }
+            } catch (e) {}
         }
 
-        return "✅ Project organized";
+        return removedEmptyBins > 0
+            ? "Removed empty bins: " + removedEmptyBins
+            : "No empty bins found";
 
     } catch (e) {
-        return "❌ ERROR: " + e.toString();
+        return "ERROR: " + e.toString();
     }
 }
-

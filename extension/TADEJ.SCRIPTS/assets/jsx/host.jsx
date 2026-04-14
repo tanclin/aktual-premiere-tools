@@ -554,3 +554,81 @@ function removeEmptyProjectBins() {
         return "ERROR: " + e.toString();
     }
 }
+
+function deleteNamedBin() {
+    try {
+        var project = app.project;
+        if (!project) return "ERROR: No project";
+
+        var root = project.rootItem;
+        var matchingBins = [];
+        var deletedBins = 0;
+        var blockedBins = 0;
+
+        function isBin(item) {
+            if (!item) {
+                return false;
+            }
+
+            if (item.type === "BIN") {
+                return true;
+            }
+
+            if (typeof ProjectItemType !== "undefined" && item.type === ProjectItemType.BIN) {
+                return true;
+            }
+
+            return false;
+        }
+
+        function collectMatchingBins(bin) {
+            if (!isBin(bin)) {
+                return;
+            }
+
+            for (var i = 0; i < bin.children.numItems; i++) {
+                var child = bin.children[i];
+
+                if (!isBin(child)) {
+                    continue;
+                }
+
+                collectMatchingBins(child);
+
+                if (child.name && child.name.toLowerCase() === "bin") {
+                    matchingBins.push(child);
+                }
+            }
+        }
+
+        collectMatchingBins(root);
+
+        if (matchingBins.length === 0) {
+            return 'No folder named "bin" found';
+        }
+
+        for (var binIndex = 0; binIndex < matchingBins.length; binIndex++) {
+            try {
+                if (matchingBins[binIndex].deleteBin() === 0) {
+                    deletedBins++;
+                } else {
+                    blockedBins++;
+                }
+            } catch (e) {
+                blockedBins++;
+            }
+        }
+
+        if (deletedBins > 0 && blockedBins === 0) {
+            return 'Deleted "bin" folders: ' + deletedBins;
+        }
+
+        if (deletedBins > 0) {
+            return 'Deleted "bin" folders: ' + deletedBins + '\nBlocked: ' + blockedBins;
+        }
+
+        return 'Found "bin" folders, but none could be deleted';
+    } catch (e) {
+        return "ERROR: " + e.toString();
+    }
+}

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.0 - feature
+
+- Added a new test `BIN` button next to `🪄` that searches for bins named `bin` and tries to delete them directly.
+
 ## 1.3.2 - fix
 
 - Fixed bin detection to use Premiere's string-based project item type (`\"BIN\"`) with enum fallback, so cleanup and recursive sequence scanning can actually see bins reliably.

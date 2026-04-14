@@ -472,13 +472,12 @@ function removeEmptyProjectBins() {
 
         var root = project.rootItem;
         var removedEmptyBins = 0;
-        var emptyBins = [];
 
         function isBin(item) {
             return item && item.type === ProjectItemType.BIN;
         }
 
-        function collectEmptyBins(bin) {
+        function collectEmptyBins(bin, emptyBins) {
             if (!isBin(bin)) {
                 return;
             }
@@ -490,7 +489,7 @@ function removeEmptyProjectBins() {
                     continue;
                 }
 
-                collectEmptyBins(child);
+                collectEmptyBins(child, emptyBins);
 
                 if (child.children.numItems === 0) {
                     emptyBins.push(child);
@@ -498,14 +497,29 @@ function removeEmptyProjectBins() {
             }
         }
 
-        collectEmptyBins(root);
+        while (true) {
+            var emptyBins = [];
 
-        for (var binIndex = 0; binIndex < emptyBins.length; binIndex++) {
-            try {
-                if (emptyBins[binIndex].deleteBin() === 0) {
-                    removedEmptyBins++;
-                }
-            } catch (e) {}
+            collectEmptyBins(root, emptyBins);
+
+            if (emptyBins.length === 0) {
+                break;
+            }
+
+            var deletedThisPass = 0;
+
+            for (var binIndex = 0; binIndex < emptyBins.length; binIndex++) {
+                try {
+                    if (emptyBins[binIndex].deleteBin() === 0) {
+                        removedEmptyBins++;
+                        deletedThisPass++;
+                    }
+                } catch (e) {}
+            }
+
+            if (deletedThisPass === 0) {
+                break;
+            }
         }
 
         return removedEmptyBins > 0

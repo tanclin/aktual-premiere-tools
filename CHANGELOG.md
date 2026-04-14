@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1 - fix
+
+- Backtracked the empty-bin cleanup issue.
+- Root cause: cleanup only collected bins that were already empty on the first scan, so parent bins that became empty only after child-bin deletion were never removed.
+- Fix: cleanup now runs in repeated passes until no more empty bins can be deleted.
+
 ## 1.3.0 - feature
 
 - Reworked ORG FOLDERS logic.

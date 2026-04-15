@@ -318,6 +318,32 @@ function projectItemHasChildren(item) {
     }
 }
 
+function sanitizeFileNamePart(value) {
+    return String(value).replace(/[\\\/:*?"<>|]+/g, "_");
+}
+
+function trimText(value) {
+    return String(value).replace(/^\s+|\s+$/g, "");
+}
+
+function parseJsonText(text) {
+    try {
+        if (typeof JSON !== "undefined" && JSON.parse) {
+            return JSON.parse(text);
+        }
+    } catch (e) {}
+
+    try {
+        return eval("(" + text + ")");
+    } catch (e) {
+        return null;
+    }
+}
+
+function shellQuoteWindowsPath(value) {
+    return '"' + String(value).replace(/"/g, '""') + '"';
+}
+
 function isBinLikeItem(item) {
     if (!item) {
         return false;
@@ -336,6 +362,37 @@ function isBinLikeItem(item) {
     } catch (e) {}
 
     return projectItemHasChildren(item);
+}
+
+function getFirstSelectedTrackItem() {
+    var project = app.project;
+    if (!project || !project.activeSequence) {
+        return null;
+    }
+
+    var selection = project.activeSequence.getSelection();
+    if (!selection || !selection.length) {
+        return null;
+    }
+
+    for (var i = 0; i < selection.length; i++) {
+        var item = selection[i];
+        if (!item) {
+            continue;
+        }
+
+        try {
+            if (item.projectItem) {
+                return item;
+            }
+        } catch (e) {}
+    }
+
+    return null;
+}
+
+function transcribeSelectedMedia() {
+    return "comming soon";
 }
 
 function organizeProject() {

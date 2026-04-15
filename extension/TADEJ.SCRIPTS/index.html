@@ -12,8 +12,7 @@
 
     <div class="tool-row">
         <button id="orgBtn" onclick="runOrganize()">ORG FOLDERS</button>
-        <button id="cleanupBtn" class="mini-btn" onclick="runCleanup()">🪄</button>
-        <button id="binBtn" class="mini-btn" onclick="runDeleteBin()">BIN</button>
+        <button id="cleanupBtn" class="clean-btn" onclick="runCleanup()">CLEAN</button>
     </div>
 
     <hr>
@@ -32,6 +31,9 @@
             <div id="durationMeter" class="meter-fill"></div>
         </div>
     </div>
+
+    <button id="transcribeBtn" class="transcribe-btn" onclick="runTranscribe()">TRANSCRIBE</button>
+
     <hr>
     <div id="log"></div>
 
@@ -44,7 +46,7 @@
 
         var cs = new CSInterface();
 
-        var CURRENT_VERSION = "1.4.1";
+        var CURRENT_VERSION = "1.5.0";
         var lastSelectionDuration = null;
         var TICKS_PER_SECOND = 254016000000;
         var SERVER_VERSION = null;
@@ -67,9 +69,9 @@
                 if (btnId === "orgBtn") {
                     btn.innerText = "ORG FOLDERS";
                 } else if (btnId === "cleanupBtn") {
-                    btn.innerText = "🪄";
-                } else if (btnId === "binBtn") {
-                    btn.innerText = "BIN";
+                    btn.innerText = "CLEAN";
+                } else if (btnId === "transcribeBtn") {
+                    btn.innerText = "TRANSCRIBE";
                 }
             }
         }
@@ -109,13 +111,13 @@
             });
         }
 
-        function runDeleteBin() {
-            setLoading("binBtn", true);
-            log('Deleting "bin"...', "info");
+        function runTranscribe() {
+            setLoading("transcribeBtn", true);
+            log("Preparing transcription...", "info");
 
-            cs.evalScript("deleteNamedBin()", function (res) {
+            cs.evalScript("transcribeSelectedMedia()", function (res) {
                 log(res, res && res.indexOf("ERROR") !== -1 ? "error" : "success");
-                setLoading("binBtn", false);
+                setLoading("transcribeBtn", false);
             });
         }
 

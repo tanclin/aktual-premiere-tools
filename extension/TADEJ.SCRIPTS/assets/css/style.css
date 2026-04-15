@@ -70,12 +70,26 @@ button {
     flex: 9;
 }
 
-.mini-btn {
-    flex: 1;
-    min-width: 34px;
-    padding: 12px 6px;
-    font-size: 16px;
+.clean-btn {
+    flex: 2;
+    min-width: 60px;
+    padding: 12px 8px;
+    font-size: 12px;
     line-height: 1;
+    background: #3d7f95;
+}
+
+.clean-btn:hover {
+    background: #4a93ac;
+}
+
+.transcribe-btn {
+    margin-top: 12px;
+    background: #a4492f;
+}
+
+.transcribe-btn:hover {
+    background: #bf5b3d;
 }
 
 /* hover */

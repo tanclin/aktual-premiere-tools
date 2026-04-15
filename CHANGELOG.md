@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0 - feature
+
+- Removed the `BIN` test button.
+- Renamed the cleanup button to `CLEAN`.
+- Added a `TRANSCRIBE` panel entry that currently ships as the placeholder message `comming soon` for public release.
+
 ## 1.4.1 - fix
 
 - Reworked ORG, empty-bin cleanup, and test-bin deletion to traverse any project item with a `children` collection, making folder detection more robust across Premiere builds.

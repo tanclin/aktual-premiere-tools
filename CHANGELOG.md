@@ -5,11 +5,12 @@
 - Hardened `install.bat` download/extract flow by adding explicit ZIP validation and switching extraction to a direct .NET zip extraction path instead of relying on the previous `Expand-Archive` step that could fail with invalid file format errors.
 - Added clearer installer validation for the public plugin release package so it now fails early if `TADEJ.SCRIPTS\server\whispr_runtime\main.py` is missing from the extracted release.
 - Switched download logic to prefer `curl.exe` with redirect/fail handling and only fall back to `Invoke-WebRequest` if needed, reducing silent bad-download cases.
+- Promoted `installer.bat` to the primary installer entrypoint and kept `install.bat` as a compatibility alias.
 
 ## 1.16.0 - feature
 
 - Rebuilt the installer into a distribution-minded bootstrap flow centered on `%USERPROFILE%\aktual-premiere-tools`, with predictable subfolders for plugin files, runtime, models, tools, presets, config, downloads, and temp data.
-- Added a new primary `install.bat` entrypoint and kept `installer.bat` as a backward-compatible wrapper.
+- Added a new clean installer flow centered on `installer.bat`, with `install.bat` available as a compatibility alias.
 - The installer now downloads the public plugin zip, `premiereCSXS.reg`, and the WAV transcription preset, installs the CEP extension, provisions the bundled WHISPR runtime, creates a local venv, installs Python dependencies, downloads portable ffmpeg, and preloads the `large-v3` model into the central install root.
 - Updated the panel/JSX runtime paths so transcription now resolves its runtime from `%USERPROFILE%\aktual-premiere-tools\runtime\whispr` and prefers the centrally installed `wav-transcribe.epr` preset.
 - Removed generated zip and Python cache leftovers from the repo so distribution artifacts and runtime bytecode do not bloat source control.

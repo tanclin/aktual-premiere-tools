@@ -85,7 +85,11 @@ exit /b 0
 :download_required_assets
 echo [3/15] Downloading required installer assets...
 call :download_file "%GITHUB_RELEASE_ZIP%" "%RELEASE_ZIP%" "plugin release zip" || exit /b 1
-call :validate_zip "%RELEASE_ZIP%" "plugin release zip" || exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip='%RELEASE_ZIP%'; $archive=[System.IO.Compression.ZipFile]::OpenRead($zip); try { if($archive.Entries.Count -le 0){ throw 'Zip contains no entries.' } } finally { $archive.Dispose() }"
+if errorlevel 1 (
+    echo ERROR: Invalid zip downloaded for plugin release zip
+    exit /b 1
+)
 call :download_file "%GITHUB_REG_URL%" "%REG_FILE%" "premiereCSXS.reg" || exit /b 1
 call :download_file "%GITHUB_WAV_PRESET_URL%" "%WAV_PRESET_FILE%" "wav-transcribe.epr" || exit /b 1
 exit /b 0
@@ -101,7 +105,13 @@ exit /b 0
 
 :extract_plugin
 echo [5/15] Extracting plugin package...
-call :extract_zip "%RELEASE_ZIP%" "%PLUGIN_EXTRACT_DIR%" "plugin release zip" || exit /b 1
+rmdir /s /q "%PLUGIN_EXTRACT_DIR%" >nul 2>&1
+mkdir "%PLUGIN_EXTRACT_DIR%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%RELEASE_ZIP%', '%PLUGIN_EXTRACT_DIR%')"
+if errorlevel 1 (
+    echo ERROR: Failed to extract plugin release zip
+    exit /b 1
+)
 if not exist "%PLUGIN_EXTRACT_DIR%\TADEJ.SCRIPTS\index.html" (
     echo ERROR: Extracted plugin package is invalid.
     exit /b 1
@@ -217,8 +227,18 @@ if exist "%FFMPEG_BIN_DIR%\ffmpeg.exe" (
 )
 
 call :download_file "%FFMPEG_ZIP_URL%" "%FFMPEG_ZIP%" "ffmpeg portable zip" || exit /b 1
-call :validate_zip "%FFMPEG_ZIP%" "ffmpeg portable zip" || exit /b 1
-call :extract_zip "%FFMPEG_ZIP%" "%FFMPEG_EXTRACT_DIR%" "ffmpeg portable zip" || exit /b 1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip='%FFMPEG_ZIP%'; $archive=[System.IO.Compression.ZipFile]::OpenRead($zip); try { if($archive.Entries.Count -le 0){ throw 'Zip contains no entries.' } } finally { $archive.Dispose() }"
+if errorlevel 1 (
+    echo ERROR: Invalid zip downloaded for ffmpeg portable zip
+    exit /b 1
+)
+rmdir /s /q "%FFMPEG_EXTRACT_DIR%" >nul 2>&1
+mkdir "%FFMPEG_EXTRACT_DIR%" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%FFMPEG_ZIP%', '%FFMPEG_EXTRACT_DIR%')"
+if errorlevel 1 (
+    echo ERROR: Failed to extract ffmpeg portable zip
+    exit /b 1
+)
 for /f "usebackq delims=" %%I in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "(Get-ChildItem -Path '%FFMPEG_EXTRACT_DIR%' -Filter ffmpeg.exe -Recurse | Select-Object -First 1 -ExpandProperty FullName)"`) do set "FFMPEG_FOUND_PATH=%%I"
 if not defined FFMPEG_FOUND_PATH (
     echo ERROR: ffmpeg.exe was not found after extraction.
@@ -230,8 +250,8 @@ if not defined FFMPEG_SOURCE_DIR (
     echo ERROR: Could not resolve ffmpeg source directory.
     exit /b 1
 )
-robocopy "%FFMPEG_SOURCE_DIR%" "%FFMPEG_BIN_DIR%" /E /NFL /NDL /NJH /NJS /NP >nul
-if %ERRORLEVEL% GEQ 8 (
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Copy-Item -Path '%FFMPEG_SOURCE_DIR%*' -Destination '%FFMPEG_BIN_DIR%' -Recurse -Force"
+if errorlevel 1 (
     echo ERROR: Failed to copy ffmpeg binaries into %FFMPEG_BIN_DIR%
     exit /b 1
 )
@@ -257,11 +277,27 @@ exit /b 0
 
 :install_python_requirements
 echo [13/15] Installing Python dependencies...
+"%VENV_DIR%\Scripts\python.exe" -c "import faster_whisper, ctranslate2, onnxruntime, tokenizers" >nul 2>&1
+if not errorlevel 1 (
+    echo Python requirements already installed.
+    exit /b 0
+)
+
 "%VENV_DIR%\Scripts\python.exe" -m pip install --upgrade pip setuptools wheel || (
     echo ERROR: Failed to upgrade pip tooling.
     exit /b 1
 )
-"%VENV_DIR%\Scripts\python.exe" -m pip install -r "%RUNTIME_ROOT%\requirements.txt" || (
+
+set "PIP_ATTEMPT=1"
+:pip_retry
+"%VENV_DIR%\Scripts\python.exe" -m pip install --prefer-binary --upgrade-strategy only-if-needed -r "%RUNTIME_ROOT%\requirements.txt"
+if errorlevel 1 (
+    if "%PIP_ATTEMPT%"=="1" (
+        echo Retrying Python dependency install...
+        set "PIP_ATTEMPT=2"
+        timeout /t 3 /nobreak >nul
+        goto :pip_retry
+    )
     echo ERROR: Failed to install Python requirements.
     exit /b 1
 )
@@ -331,29 +367,6 @@ if not exist "%DOWNLOAD_TARGET%" (
 )
 for %%I in ("%DOWNLOAD_TARGET%") do if %%~zI LEQ 0 (
     echo ERROR: Downloaded file is empty for %DOWNLOAD_LABEL%
-    exit /b 1
-)
-exit /b 0
-
-:validate_zip
-set "ZIP_PATH=%~1"
-set "ZIP_LABEL=%~2"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $zip='%ZIP_PATH%'; $archive=[System.IO.Compression.ZipFile]::OpenRead($zip); try { if($archive.Entries.Count -le 0){ throw 'Zip contains no entries.' } } finally { $archive.Dispose() }"
-if errorlevel 1 (
-    echo ERROR: Invalid zip downloaded for %ZIP_LABEL%
-    exit /b 1
-)
-exit /b 0
-
-:extract_zip
-set "ZIP_PATH=%~1"
-set "ZIP_DEST=%~2"
-set "ZIP_LABEL=%~3"
-rmdir /s /q "%ZIP_DEST%" >nul 2>&1
-mkdir "%ZIP_DEST%" >nul 2>&1
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory('%ZIP_PATH%', '%ZIP_DEST%')"
-if errorlevel 1 (
-    echo ERROR: Failed to extract %ZIP_LABEL%
     exit /b 1
 )
 exit /b 0

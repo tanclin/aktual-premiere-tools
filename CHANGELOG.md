@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.16.3 - fix
+
+- Added rerun-safe Python dependency handling to `installer.bat`: the installer now skips pip work when the required transcription packages are already importable and retries the requirements install once before failing.
+- This makes repeated installer runs more stable on machines where a previous partial install or file-lock situation would otherwise break the transcription environment bootstrap.
+
+## 1.16.2 - fix
+
+- Removed the fragile `:extract_zip` helper dependency from the main installer flow and inlined the critical ZIP validation/extraction steps so `installer.bat` no longer fails with `The system cannot find the batch label specified - extract_zip`.
+- Fixed the ffmpeg bootstrap step by replacing the failing `robocopy` copy from the extracted ffmpeg build with a direct PowerShell `Copy-Item` into `%USERPROFILE%\aktual-premiere-tools\tools\ffmpeg\bin`.
+- Re-tested the installer flow locally and confirmed it now progresses past plugin extraction and into the ffmpeg/bootstrap stages.
+
 ## 1.16.1 - fix
 
 - Hardened `install.bat` download/extract flow by adding explicit ZIP validation and switching extraction to a direct .NET zip extraction path instead of relying on the previous `Expand-Archive` step that could fail with invalid file format errors.

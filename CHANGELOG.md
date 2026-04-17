@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.16.4 - fix
+
+- Removed the non-essential `install.bat` alias so the project now exposes only one installer entrypoint: `installer.bat`.
+
 ## 1.16.3 - fix
 
 - Added rerun-safe Python dependency handling to `installer.bat`: the installer now skips pip work when the required transcription packages are already importable and retries the requirements install once before failing.

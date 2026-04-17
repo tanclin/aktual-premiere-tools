@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Transcribe</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body class="transcribe-window-body">
+    <div class="transcribe-shell">
+        <h2>TRANSCRIBE</h2>
+
+        <div class="transcribe-card">
+            <div class="transcribe-section">
+                <div class="section-title">Source</div>
+                <label class="choice-row">
+                    <input type="radio" name="sourceMode" value="inout">
+                    <span>In-Out</span>
+                </label>
+                <label class="choice-row">
+                    <input type="radio" name="sourceMode" value="entire" checked>
+                    <span>Entire Timeline</span>
+                </label>
+            </div>
+
+            <div class="transcribe-section">
+                <div class="section-title">Languages</div>
+                <label class="choice-row">
+                    <input type="checkbox" value="slo" checked>
+                    <span>SLO</span>
+                </label>
+                <label class="choice-row">
+                    <input type="checkbox" value="cro">
+                    <span>CRO</span>
+                </label>
+                <label class="choice-row">
+                    <input type="checkbox" value="srb">
+                    <span>SRB</span>
+                </label>
+                <label class="choice-row">
+                    <input type="checkbox" value="bos">
+                    <span>BOS</span>
+                </label>
+                <div class="hint-text">BOS trenutno uporablja isti practical bridge kot CRO, ker Project A nima locenega `bs` mode-a.</div>
+            </div>
+
+            <button id="popupTranscribeBtn" class="transcribe-btn popup-primary-btn" onclick="submitTranscription()">Transcribe</button>
+
+            <div class="job-status-box">
+                <div id="jobStatusTitle">Idle</div>
+                <div id="jobStatusMeta">Choose source and languages, then start transcription.</div>
+            </div>
+
+            <hr>
+
+            <div id="captionMakerSection" class="caption-maker disabled">
+                <div class="section-title">Caption maker</div>
+                <label class="input-label" for="wordsPerLine">Words per line</label>
+                <input id="wordsPerLine" class="number-input" type="number" value="4" min="1" max="12">
+                <button id="createCaptionsBtn" class="caption-btn" onclick="createCaptions()" disabled>Create Captions</button>
+                <div id="captionMakerMeta" class="hint-text">Caption Maker unlocks after a successful transcription.</div>
+            </div>
+        </div>
+
+        <div id="transcribeOverlay" class="popup-overlay hidden">
+            <div class="popup-overlay-card">
+                <div class="overlay-title">Transcribing</div>
+                <div id="overlayMeta">Exporting audio...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function getOpenerBridge() {
+            try {
+                if (window.opener && !window.opener.closed && window.opener.getTranscriptionUiState) {
+                    return window.opener;
+                }
+            } catch (e) {}
+
+            return null;
+        }
+
+        function getCurrentState() {
+            var openerBridge = getOpenerBridge();
+            if (!openerBridge) {
+                return null;
+            }
+
+            try {
+                return openerBridge.getTranscriptionUiState();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function getSelectedSource() {
+            var checked = document.querySelector('input[name="sourceMode"]:checked');
+            return checked ? checked.value : "entire";
+        }
+
+        function getSelectedLanguages() {
+            var boxes = document.querySelectorAll('.transcribe-section input[type="checkbox"]');
+            var values = [];
+
+            for (var i = 0; i < boxes.length; i++) {
+                if (boxes[i].checked) {
+                    values.push(boxes[i].value);
+                }
+            }
+
+            if (!values.length) {
+                values.push("slo");
+            }
+
+            return values;
+        }
+
+        function setControlsDisabled(isDisabled) {
+            var sourceInputs = document.querySelectorAll('input[name="sourceMode"]');
+            var langInputs = document.querySelectorAll('.transcribe-section input[type="checkbox"]');
+            var createBtn = document.getElementById("createCaptionsBtn");
+            var popupBtn = document.getElementById("popupTranscribeBtn");
+            var wordsInput = document.getElementById("wordsPerLine");
+            var i = 0;
+
+            for (i = 0; i < sourceInputs.length; i++) {
+                sourceInputs[i].disabled = isDisabled;
+            }
+
+            for (i = 0; i < langInputs.length; i++) {
+                langInputs[i].disabled = isDisabled;
+            }
+
+            popupBtn.disabled = isDisabled;
+            popupBtn.innerText = isDisabled ? "Transcribing..." : "Transcribe";
+
+            if (document.getElementById("captionMakerSection").classList.contains("disabled")) {
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+            }
+        }
+
+        function renderFromOpenerState() {
+            var state = getCurrentState();
+            var overlay = document.getElementById("transcribeOverlay");
+            var statusTitle = document.getElementById("jobStatusTitle");
+            var statusMeta = document.getElementById("jobStatusMeta");
+            var overlayMeta = document.getElementById("overlayMeta");
+            var captionSection = document.getElementById("captionMakerSection");
+            var captionMeta = document.getElementById("captionMakerMeta");
+            var createBtn = document.getElementById("createCaptionsBtn");
+            var wordsInput = document.getElementById("wordsPerLine");
+
+            if (!state) {
+                statusTitle.innerText = "Connection missing";
+                statusMeta.innerText = "Keep the main panel open while using this window.";
+                overlay.classList.add("hidden");
+                setControlsDisabled(true);
+                return;
+            }
+
+            if (state.status === "completed") {
+                overlay.classList.add("hidden");
+                setControlsDisabled(false);
+                captionSection.classList.remove("disabled");
+                createBtn.disabled = false;
+                wordsInput.disabled = false;
+                statusTitle.innerText = "Completed";
+                statusMeta.innerText = state.sequenceName
+                    ? state.sequenceName + " ready for captions."
+                    : "Transcription finished.";
+                captionMeta.innerText = state.summary || "Use Create Captions to insert a subtitle track into the active sequence.";
+                return;
+            }
+
+            if (state.status === "failed") {
+                overlay.classList.add("hidden");
+                setControlsDisabled(false);
+                captionSection.classList.add("disabled");
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+                statusTitle.innerText = "Failed";
+                statusMeta.innerText = state.error || "Transcription failed.";
+                captionMeta.innerText = "Caption Maker stays disabled until a valid transcription finishes.";
+                return;
+            }
+
+            if (state.status === "exporting" || state.status === "launching" || state.status === "transcribing") {
+                overlay.classList.remove("hidden");
+                overlayMeta.innerText = state.statusLabel || "Transcribing";
+                setControlsDisabled(true);
+                captionSection.classList.add("disabled");
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+                statusTitle.innerText = state.statusLabel || "Transcribing";
+                statusMeta.innerText = state.sequenceName
+                    ? "Sequence: " + state.sequenceName
+                    : "Background transcription job is running.";
+                captionMeta.innerText = "Caption Maker unlocks after a successful transcription.";
+                return;
+            }
+
+            overlay.classList.add("hidden");
+            setControlsDisabled(false);
+            captionSection.classList.add("disabled");
+            createBtn.disabled = true;
+            wordsInput.disabled = true;
+            statusTitle.innerText = "Idle";
+            statusMeta.innerText = "Choose source and languages, then start transcription.";
+            captionMeta.innerText = "Caption Maker unlocks after a successful transcription.";
+        }
+
+        function submitTranscription() {
+            var openerBridge = getOpenerBridge();
+            if (!openerBridge || !openerBridge.startTranscriptionJobFromPopup) {
+                alert("Main panel is not available.");
+                return;
+            }
+
+            openerBridge.startTranscriptionJobFromPopup({
+                source: getSelectedSource(),
+                languages: getSelectedLanguages()
+            }, function (result) {
+                renderFromOpenerState();
+                if (result && !result.ok) {
+                    alert(result.message || "Failed to start transcription.");
+                }
+            });
+        }
+
+        function createCaptions() {
+            var openerBridge = getOpenerBridge();
+            if (!openerBridge || !openerBridge.createCaptionsFromPopup) {
+                alert("Main panel is not available.");
+                return;
+            }
+
+            openerBridge.createCaptionsFromPopup(document.getElementById("wordsPerLine").value, function (result) {
+                renderFromOpenerState();
+                if (!result || !result.ok) {
+                    alert(result && result.message ? result.message : "Failed to create captions.");
+                }
+            });
+        }
+
+        setInterval(renderFromOpenerState, 1000);
+        renderFromOpenerState();
+    </script>
+</body>
+</html>

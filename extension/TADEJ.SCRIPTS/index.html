@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -32,10 +32,102 @@
         </div>
     </div>
 
-    <button id="transcribeBtn" class="transcribe-btn" onclick="runTranscribe()">TRANSCRIBE</button>
+    <button id="transcribeBtn" class="transcribe-btn" onclick="openTranscriptionWindow()">TRANSCRIBE</button>
 
     <hr>
     <div id="log"></div>
+
+    <div id="transcribeModal" class="panel-modal hidden">
+        <div class="panel-modal-backdrop" onclick="closeTranscriptionWindow()"></div>
+        <div class="panel-modal-card">
+            <div class="panel-modal-head">
+                <div class="panel-modal-title">TRANSCRIBE</div>
+                <button id="transcribeModalClose" class="panel-modal-close" onclick="closeTranscriptionWindow()">X</button>
+            </div>
+            <div id="sequenceContextLabel" class="panel-modal-sequence">No active sequence</div>
+
+            <div class="panel-modal-body">
+                <div class="transcribe-section">
+                    <div class="section-title">Source</div>
+                    <div class="toggle-field">
+                        <span class="toggle-side-label" id="sourceLabelLeft">In-Out</span>
+                        <label class="switch">
+                            <input id="sourceToggle" type="checkbox">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-side-label" id="sourceLabelRight">Entire Timeline</span>
+                    </div>
+                </div>
+
+                <div class="transcribe-section">
+                    <div class="section-title">Languages</div>
+                    <label class="choice-row language-choice">
+                        <input type="checkbox" value="slo" checked>
+                        <span>SLO</span>
+                    </label>
+                    <label class="choice-row language-choice">
+                        <input type="checkbox" value="cro">
+                        <span>CRO</span>
+                    </label>
+                    <label class="choice-row language-choice">
+                        <input type="checkbox" value="srb">
+                        <span>SRB</span>
+                    </label>
+                </div>
+
+                <div class="transcribe-section">
+                    <div class="section-title">Processing</div>
+                    <div class="toggle-field">
+                        <span class="toggle-side-label" id="processingLabelLeft">CPU</span>
+                        <label class="switch">
+                            <input id="processingToggle" type="checkbox">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-side-label" id="processingLabelRight">GPU</span>
+                    </div>
+                    <div class="hint-text" id="processingMeta">Checking GPU support...</div>
+                </div>
+
+                <button id="popupTranscribeBtn" class="transcribe-btn popup-primary-btn" onclick="submitTranscription()">Transcribe</button>
+
+                <div class="job-status-box">
+                    <div id="jobStatusTitle">Idle</div>
+                    <div id="jobStatusMeta">Choose source and languages, then start transcription.</div>
+                </div>
+
+                <hr>
+
+                <div id="captionMakerSection" class="caption-maker disabled">
+                    <div class="section-title">Caption maker</div>
+
+                    <div class="style-group">
+                        <div class="section-title">Layout</div>
+                        <label class="input-label" for="wordsPerLine">Words per line</label>
+                        <input id="wordsPerLine" data-style-path="layout.wordsPerLine" class="number-input style-control" type="number" value="4" min="1" max="12">
+                        <label class="input-label" for="maxCharsPerLine">Max chars per line</label>
+                        <input id="maxCharsPerLine" data-style-path="layout.maxCharsPerLine" class="number-input style-control" type="number" value="32" min="8" max="80">
+                        <div class="toggle-field compact-toggle">
+                            <span class="toggle-side-label">1 line</span>
+                            <label class="switch">
+                                <input id="maxLinesToggle" type="checkbox">
+                                <span class="slider round"></span>
+                            </label>
+                            <span class="toggle-side-label">2 lines</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <div class="panel-modal-footer">
+                <div id="captionActionWrap" class="caption-action-wrap is-locked">
+                    <button id="createCaptionsBtn" class="caption-btn" onclick="createCaptions()" disabled>Create Captions</button>
+                    <div id="captionLockOverlay" class="caption-lock-overlay">Unlocks after successful transcription</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
 
     <div class="footer">
         <div id="versionStatus">Version: loading...</div>
@@ -46,10 +138,24 @@
 
         var cs = new CSInterface();
 
-        var CURRENT_VERSION = "1.5.0";
+        var CURRENT_VERSION = "1.14.0";
         var lastSelectionDuration = null;
         var TICKS_PER_SECOND = 254016000000;
         var SERVER_VERSION = null;
+        var CAPTION_LAYOUT_STORAGE_KEY = "aktualCaptionLayoutStateBySequence";
+        var ACTIVE_SEQUENCE_KEY = "__no_active_sequence__";
+        var isTranscriptionModalOpen = false;
+        var transcriptionPollTimer = null;
+        var sequencePollTimer = null;
+        var captionStyleSaveTimer = null;
+        var gpuProbePollTimer = null;
+        var notifiedJobIds = {};
+        var gpuCapability = buildDefaultGpuCapability();
+        var currentSequenceContext = buildDefaultSequenceContext();
+        var transcriptionStateBySequence = {};
+        var captionLayoutBySequence = loadStateMap(CAPTION_LAYOUT_STORAGE_KEY);
+        var transcriptionState = buildDefaultTranscriptionState();
+        var captionStyle = buildDefaultCaptionLayoutState();
 
         function log(msg, type) {
             var el = document.getElementById("log");
@@ -70,8 +176,6 @@
                     btn.innerText = "ORG FOLDERS";
                 } else if (btnId === "cleanupBtn") {
                     btn.innerText = "CLEAN";
-                } else if (btnId === "transcribeBtn") {
-                    btn.innerText = "TRANSCRIBE";
                 }
             }
         }
@@ -108,16 +212,6 @@
             cs.evalScript("removeEmptyProjectBins()", function (res) {
                 log(res, res && res.indexOf("ERROR") !== -1 ? "error" : "success");
                 setLoading("cleanupBtn", false);
-            });
-        }
-
-        function runTranscribe() {
-            setLoading("transcribeBtn", true);
-            log("Preparing transcription...", "info");
-
-            cs.evalScript("transcribeSelectedMedia()", function (res) {
-                log(res, res && res.indexOf("ERROR") !== -1 ? "error" : "success");
-                setLoading("transcribeBtn", false);
             });
         }
 
@@ -263,25 +357,1344 @@
                 url = "https://github.com/tanclin/aktual-premiere-tools";
             }
 
+            window.open(url, "_blank");
+        }
+
+        function buildDefaultGpuCapability() {
+            return {
+                status: "checking",
+                gpuCapable: false,
+                recommendedDevice: "cpu",
+                selectedDevice: "cpu",
+                reason: "Checking GPU support...",
+                details: "",
+                vramMb: 0,
+                checkedAt: 0
+            };
+        }
+
+        function buildDefaultSequenceContext() {
+            return {
+                hasSequence: false,
+                sequenceId: "",
+                sequenceName: "",
+                sequenceKey: "",
+                storageKey: ACTIVE_SEQUENCE_KEY
+            };
+        }
+
+        function getSequenceStorageKey(sequenceKey) {
+            return sequenceKey ? "sequence:" + sequenceKey : ACTIVE_SEQUENCE_KEY;
+        }
+
+        function normalizeSequenceContext(data) {
+            var sequenceId = data && data.sequenceId ? String(data.sequenceId) : "";
+            var sequenceKey = data && data.sequenceKey ? String(data.sequenceKey) : "";
+            return {
+                hasSequence: !!(data && data.hasSequence && sequenceId && sequenceKey),
+                sequenceId: sequenceId,
+                sequenceName: data && data.sequenceName ? String(data.sequenceName) : "",
+                sequenceKey: sequenceKey,
+                storageKey: getSequenceStorageKey(sequenceKey)
+            };
+        }
+
+        function buildDefaultTranscriptionState() {
+            return {
+                status: "idle",
+                statusLabel: "Idle",
+                jobId: "",
+                statePath: "",
+                sequenceId: "",
+                sequenceName: "",
+                sequenceKey: "",
+                source: "inout",
+                processingDevice: "gpu",
+                requestedLanguages: ["slo"],
+                normalizedLanguages: ["sl"],
+                resultJsonPath: "",
+                resultSrtPath: "",
+                activeTranscriptRecordId: "",
+                manifestPath: "",
+                storageRootPath: "",
+                audioPath: "",
+                outputDir: "",
+                workerStdoutPath: "",
+                workerStderrPath: "",
+                error: "",
+                summary: "",
+                notificationShown: false,
+                persistenceStatus: "",
+                updatedAt: 0
+            };
+        }
+
+        function loadStateMap(storageKey) {
             try {
-                cs.openURLInDefaultBrowser(url);
-                log("Opening update page...", "info");
+                var raw = localStorage.getItem(storageKey);
+                if (!raw) {
+                    return {};
+                }
+                return JSON.parse(raw) || {};
             } catch (e) {
-                try {
-                    window.cep.util.openURLInDefaultBrowser(url);
-                    log("Opening (fallback)...", "info");
-                } catch (e2) {
-                    log("Open manually:\n" + url, "error");
+                return {};
+            }
+        }
+
+        function persistStateMap(storageKey, value) {
+            localStorage.setItem(storageKey, JSON.stringify(value || {}));
+        }
+
+        function normalizeTranscriptionState(state) {
+            var defaults = buildDefaultTranscriptionState();
+            var parsed = state || {};
+            var normalized = {};
+            var key = "";
+
+            for (key in defaults) {
+                normalized[key] = typeof parsed[key] === "undefined" ? defaults[key] : parsed[key];
+            }
+
+            normalized.status = String(normalized.status || "idle");
+            normalized.statusLabel = String(normalized.statusLabel || "Idle");
+            normalized.sequenceId = normalized.sequenceId ? String(normalized.sequenceId) : "";
+            normalized.sequenceName = normalized.sequenceName ? String(normalized.sequenceName) : "";
+            normalized.sequenceKey = normalized.sequenceKey ? String(normalized.sequenceKey) : "";
+            normalized.source = normalized.source === "entire" ? "entire" : "inout";
+            normalized.processingDevice = normalized.processingDevice === "gpu" ? "gpu" : "cpu";
+            normalized.requestedLanguages = Array.isArray(normalized.requestedLanguages) && normalized.requestedLanguages.length
+                ? normalized.requestedLanguages
+                : ["slo"];
+            normalized.normalizedLanguages = Array.isArray(normalized.normalizedLanguages) && normalized.normalizedLanguages.length
+                ? normalized.normalizedLanguages
+                : normalizeUiLanguages(normalized.requestedLanguages);
+            normalized.notificationShown = !!normalized.notificationShown;
+            normalized.updatedAt = Number(normalized.updatedAt) || 0;
+
+            return normalized;
+        }
+
+        function getScopedTranscriptionState(storageKey) {
+            return normalizeTranscriptionState(transcriptionStateBySequence[storageKey]);
+        }
+
+        function persistTranscriptionState() {
+            transcriptionStateBySequence[currentSequenceContext.storageKey] = normalizeTranscriptionState(transcriptionState);
+        }
+
+        function deepClone(value) {
+            return JSON.parse(JSON.stringify(value));
+        }
+
+        function buildDefaultCaptionLayoutState() {
+            return {
+                layout: {
+                    wordsPerLine: 4,
+                    maxLinesPerCaption: 2,
+                    maxCharsPerLine: 32
+                }
+            };
+        }
+
+        function getScopedCaptionStyle(storageKey) {
+            return normalizeCaptionStyleState(mergeCaptionStyle(buildDefaultCaptionLayoutState(), captionLayoutBySequence[storageKey] || {}));
+        }
+
+        function persistCaptionStyleState() {
+            captionLayoutBySequence[currentSequenceContext.storageKey] = normalizeCaptionStyleState(captionStyle);
+            persistStateMap(CAPTION_LAYOUT_STORAGE_KEY, captionLayoutBySequence);
+            scheduleCaptionStylePersist();
+        }
+
+        function mergeCaptionStyle(base, override) {
+            var output = deepClone(base);
+            var key = "";
+
+            for (key in override) {
+                if (!override.hasOwnProperty(key)) {
+                    continue;
+                }
+
+                if (
+                    override[key] &&
+                    typeof override[key] === "object" &&
+                    !Array.isArray(override[key]) &&
+                    output[key] &&
+                    typeof output[key] === "object" &&
+                    !Array.isArray(output[key])
+                ) {
+                    output[key] = mergeCaptionStyle(output[key], override[key]);
+                } else {
+                    output[key] = override[key];
+                }
+            }
+
+            return output;
+        }
+
+        function setByPath(target, path, value) {
+            var parts = path.split(".");
+            var ref = target;
+
+            for (var i = 0; i < parts.length - 1; i++) {
+                if (!ref[parts[i]]) {
+                    ref[parts[i]] = {};
+                }
+                ref = ref[parts[i]];
+            }
+
+            ref[parts[parts.length - 1]] = value;
+        }
+
+        function getByPath(target, path) {
+            var parts = path.split(".");
+            var ref = target;
+
+            for (var i = 0; i < parts.length; i++) {
+                if (!ref) {
+                    return undefined;
+                }
+                ref = ref[parts[i]];
+            }
+
+            return ref;
+        }
+
+        function normalizeCaptionStyleState(style) {
+            var merged = mergeCaptionStyle(buildDefaultCaptionLayoutState(), style || {});
+            merged.layout.wordsPerLine = Math.max(1, Math.min(12, parseInt(merged.layout.wordsPerLine, 10) || 4));
+            merged.layout.maxLinesPerCaption = merged.layout.maxLinesPerCaption === 1 ? 1 : 2;
+            merged.layout.maxCharsPerLine = Math.max(8, Math.min(80, parseInt(merged.layout.maxCharsPerLine, 10) || 32));
+            return merged;
+        }
+
+        function setCaptionStyle(nextStyle) {
+            captionStyle = normalizeCaptionStyleState(nextStyle);
+            persistCaptionStyleState();
+            renderCaptionStyleControls();
+        }
+
+        function handleStyleInputChange(event) {
+            var target = event && event.target ? event.target : null;
+            if (!target || !target.getAttribute("data-style-path")) {
+                return;
+            }
+
+            var nextStyle = deepClone(captionStyle);
+            var path = target.getAttribute("data-style-path");
+            var value = target.type === "checkbox" ? target.checked : target.value;
+
+            if (target.type === "number") {
+                value = target.step && String(target.step).indexOf(".") !== -1
+                    ? parseFloat(value)
+                    : parseInt(value, 10);
+            }
+
+            setByPath(nextStyle, path, value);
+            setCaptionStyle(nextStyle);
+        }
+
+        function handleMaxLinesToggleChange() {
+            var nextStyle = deepClone(captionStyle);
+            nextStyle.layout.maxLinesPerCaption = document.getElementById("maxLinesToggle").checked ? 2 : 1;
+            setCaptionStyle(nextStyle);
+        }
+
+        function renderCaptionStyleControls() {
+            var controls = document.querySelectorAll(".style-control");
+            var maxLinesToggle = document.getElementById("maxLinesToggle");
+            var i = 0;
+
+            captionStyle = normalizeCaptionStyleState(captionStyle);
+
+            for (i = 0; i < controls.length; i++) {
+                var control = controls[i];
+                var path = control.getAttribute("data-style-path");
+                var value = getByPath(captionStyle, path);
+
+                if (control.type === "checkbox") {
+                    control.checked = !!value;
+                } else if (typeof value !== "undefined") {
+                    control.value = value;
+                }
+            }
+
+            if (maxLinesToggle) {
+                maxLinesToggle.checked = captionStyle.layout.maxLinesPerCaption === 2;
+            }
+
+            persistCaptionStyleState();
+            renderToggleStates();
+        }
+
+        function renderToggleStates() {
+            var sourceToggle = document.getElementById("sourceToggle");
+            var sourceLabelLeft = document.getElementById("sourceLabelLeft");
+            var sourceLabelRight = document.getElementById("sourceLabelRight");
+            var maxLinesToggle = document.getElementById("maxLinesToggle");
+            var processingToggle = document.getElementById("processingToggle");
+            var toggleFields = [
+                { toggle: sourceToggle, offLabel: sourceLabelLeft, onLabel: sourceLabelRight },
+                { toggle: maxLinesToggle, offLabel: document.querySelector(".compact-toggle .toggle-side-label:first-child"), onLabel: document.querySelector(".compact-toggle .toggle-side-label:last-child") },
+                { toggle: processingToggle, offLabel: document.getElementById("processingLabelLeft"), onLabel: document.getElementById("processingLabelRight") }
+            ];
+            var i = 0;
+
+            for (i = 0; i < toggleFields.length; i++) {
+                var entry = toggleFields[i];
+                if (!entry.toggle) {
+                    continue;
+                }
+
+                if (entry.offLabel) {
+                    entry.offLabel.classList.toggle("is-active", !entry.toggle.checked);
+                }
+                if (entry.onLabel) {
+                    entry.onLabel.classList.toggle("is-active", !!entry.toggle.checked);
                 }
             }
         }
 
+        function isTranscriptionBusy() {
+            return transcriptionState.status === "exporting" ||
+                transcriptionState.status === "launching" ||
+                transcriptionState.status === "transcribing";
+        }
+
+        function isBusyStatus(status) {
+            return status === "exporting" || status === "launching" || status === "transcribing";
+        }
+
+        function applyCurrentSequenceState(options) {
+            var silent = options && options.silent;
+            transcriptionState = getScopedTranscriptionState(currentSequenceContext.storageKey);
+            captionStyle = getScopedCaptionStyle(currentSequenceContext.storageKey);
+
+            if (currentSequenceContext.hasSequence) {
+                transcriptionState.sequenceId = currentSequenceContext.sequenceId;
+                transcriptionState.sequenceName = currentSequenceContext.sequenceName;
+                transcriptionState.sequenceKey = currentSequenceContext.sequenceKey;
+            }
+
+            refreshMainTranscribeButton();
+            if (!silent) {
+                renderTranscriptionModal();
+                renderCaptionStyleControls();
+            }
+        }
+
+        function setSequenceContext(nextContext, options) {
+            currentSequenceContext = normalizeSequenceContext(nextContext);
+            applyCurrentSequenceState(options);
+        }
+
+        function renderGpuControls() {
+            var processingToggle = document.getElementById("processingToggle");
+            var processingMeta = document.getElementById("processingMeta");
+            var resolvedDevice = gpuCapability.gpuCapable
+                ? (transcriptionState.processingDevice === "gpu" ? "gpu" : "cpu")
+                : "cpu";
+
+            if (processingToggle) {
+                processingToggle.checked = resolvedDevice === "gpu";
+                processingToggle.disabled = !gpuCapability.gpuCapable || isTranscriptionBusy() || !currentSequenceContext.hasSequence;
+            }
+
+            if (processingMeta) {
+                if (gpuCapability.status === "checking") {
+                    processingMeta.innerText = "Checking GPU support...";
+                } else if (gpuCapability.gpuCapable) {
+                    processingMeta.innerText = gpuCapability.details
+                        ? "GPU available: " + gpuCapability.details
+                        : "GPU available for WHISPR processing.";
+                } else {
+                    processingMeta.innerText = gpuCapability.reason || "GPU premalo zmogljiv ali ni na voljo.";
+                }
+            }
+
+            renderToggleStates();
+        }
+
+        function getGpuProbePath() {
+            var userDataPath = normalizeCepPath(cs.getSystemPath(SystemPath.USER_DATA));
+            return userDataPath + "\\TADEJ.SCRIPTS\\gpu_probe.json";
+        }
+
+        function launchBackgroundProcess(commandPath, commandArgs) {
+            if (!window.cep || !window.cep.process || !window.cep.process.createProcess) {
+                return {
+                    ok: false,
+                    error: "CEP process bridge is not available in this panel."
+                };
+            }
+
+            var args = [commandPath].concat(commandArgs || []);
+            var result = null;
+
+            try {
+                result = window.cep.process.createProcess.apply(window.cep.process, args);
+            } catch (e) {
+                return {
+                    ok: false,
+                    error: "Failed to launch process: " + e
+                };
+            }
+
+            if (typeof result === "string" && result.toLowerCase().indexOf("error") !== -1) {
+                return {
+                    ok: false,
+                    error: result
+                };
+            }
+
+            return {
+                ok: true,
+                processHandle: result
+            };
+        }
+
+        function stopGpuProbePolling() {
+            if (!gpuProbePollTimer) {
+                return;
+            }
+
+            clearInterval(gpuProbePollTimer);
+            gpuProbePollTimer = null;
+        }
+
+        function pollGpuCapability() {
+            var probePath = getGpuProbePath();
+            cs.evalScript("readTextFile(" + escapeForEvalString(probePath) + ")", function (res) {
+                if (!res || res === "EvalScript error.") {
+                    return;
+                }
+
+                var data = null;
+                try {
+                    data = JSON.parse(res);
+                } catch (e) {
+                    return;
+                }
+
+                gpuCapability = {
+                    status: data.status || "done",
+                    gpuCapable: !!data.gpuCapable,
+                    recommendedDevice: data.recommendedDevice || "cpu",
+                    selectedDevice: !!data.gpuCapable ? (transcriptionState.processingDevice || data.recommendedDevice || "gpu") : "cpu",
+                    reason: data.reason || "",
+                    details: data.details || "",
+                    vramMb: Number(data.vramMb) || 0,
+                    checkedAt: Date.now()
+                };
+
+                if (!gpuCapability.gpuCapable && transcriptionState.processingDevice !== "cpu") {
+                    setTranscriptionState({ processingDevice: "cpu" }, { silent: true });
+                } else if (
+                    gpuCapability.gpuCapable &&
+                    transcriptionState.status === "idle" &&
+                    !transcriptionState.jobId &&
+                    !transcriptionState.resultJsonPath &&
+                    transcriptionState.processingDevice !== "gpu"
+                ) {
+                    setTranscriptionState({ processingDevice: gpuCapability.recommendedDevice || "gpu" }, { silent: true });
+                }
+
+                stopGpuProbePolling();
+                renderGpuControls();
+            });
+        }
+
+        function startGpuCapabilityCheck() {
+            var extensionPath = normalizeCepPath(cs.getSystemPath(SystemPath.EXTENSION));
+            var probeScriptPath = extensionPath + "\\server\\gpu_probe.py";
+            var pythonPath = "C:\\Users\\Produkcija\\Documents\\TADEJ\\WHISPR\\.venv\\Scripts\\python.exe";
+            var outputPath = getGpuProbePath();
+            var cmdPath = "C:\\Windows\\System32\\cmd.exe";
+
+            gpuCapability = buildDefaultGpuCapability();
+            renderGpuControls();
+
+            cs.evalScript("writeTextFile(" + escapeForEvalString(outputPath) + "," + escapeForEvalString("") + ")", function () {});
+
+            var launchResult = launchBackgroundProcess(cmdPath, ["/c", pythonPath, probeScriptPath, "--output-path", outputPath]);
+            if (!launchResult.ok) {
+                gpuCapability.status = "done";
+                gpuCapability.reason = "GPU check failed to start. CPU mode only.";
+                renderGpuControls();
+                return;
+            }
+
+            stopGpuProbePolling();
+            gpuProbePollTimer = setInterval(pollGpuCapability, 1200);
+        }
+
+        function buildCaptionStylePersistencePayload() {
+            return {
+                sequenceId: currentSequenceContext.sequenceId,
+                sequenceName: currentSequenceContext.sequenceName,
+                sequenceKey: currentSequenceContext.sequenceKey,
+                captionStyle: normalizeCaptionStyleState(captionStyle)
+            };
+        }
+
+        function persistCaptionStylePayload(payload) {
+            if (!payload || !payload.sequenceId || !payload.sequenceKey) {
+                return;
+            }
+
+            cs.evalScript(
+                "saveSequenceCaptionStyle(" + escapeForEvalString(JSON.stringify(payload)) + ")",
+                function () {}
+            );
+        }
+
+        function scheduleCaptionStylePersist() {
+            if (!currentSequenceContext.hasSequence) {
+                return;
+            }
+
+            if (captionStyleSaveTimer) {
+                clearTimeout(captionStyleSaveTimer);
+            }
+
+            captionStyleSaveTimer = setTimeout(function () {
+                captionStyleSaveTimer = null;
+                persistCaptionStylePayload(buildCaptionStylePersistencePayload());
+            }, 120);
+        }
+
+        function loadSequencePersistenceFromDisk(callback) {
+            callback = callback || function () {};
+
+            if (!currentSequenceContext.hasSequence) {
+                callback(false);
+                return;
+            }
+
+            cs.evalScript(
+                "loadSequencePersistence(" +
+                    escapeForEvalString(currentSequenceContext.sequenceId) + "," +
+                    escapeForEvalString(currentSequenceContext.sequenceName) + "," +
+                    escapeForEvalString(currentSequenceContext.sequenceKey) + ")",
+                function (res) {
+                    var data = null;
+
+                    try {
+                        data = JSON.parse(res);
+                    } catch (e) {
+                        data = null;
+                    }
+
+                    if (!data || !data.ok) {
+                        callback(false);
+                        return;
+                    }
+
+                    transcriptionStateBySequence[currentSequenceContext.storageKey] = normalizeTranscriptionState(data.transcriptionState || {});
+                    if (data.captionStyle) {
+                        captionLayoutBySequence[currentSequenceContext.storageKey] = normalizeCaptionStyleState(data.captionStyle);
+                        persistStateMap(CAPTION_LAYOUT_STORAGE_KEY, captionLayoutBySequence);
+                    }
+                    applyCurrentSequenceState({ silent: false });
+                    callback(!!data.foundTranscript);
+                }
+            );
+        }
+
+        function updateSequenceContextLabel() {
+            var label = document.getElementById("sequenceContextLabel");
+            if (!label) {
+                return;
+            }
+
+            if (!currentSequenceContext.hasSequence) {
+                label.innerText = "No active sequence";
+                return;
+            }
+
+            label.innerText = "Sequence: " + currentSequenceContext.sequenceName;
+        }
+
+        function syncCurrentSequenceContext(callback, options) {
+            callback = callback || function () {};
+
+            cs.evalScript("getActiveSequenceInfo()", function (res) {
+                var data = null;
+                var nextContext = buildDefaultSequenceContext();
+
+                try {
+                    data = JSON.parse(res);
+                } catch (e) {
+                    data = null;
+                }
+
+                if (data && data.ok && data.hasSequence) {
+                    nextContext = normalizeSequenceContext(data);
+                }
+
+                var contextChanged = nextContext.storageKey !== currentSequenceContext.storageKey ||
+                    nextContext.sequenceName !== currentSequenceContext.sequenceName ||
+                    nextContext.sequenceKey !== currentSequenceContext.sequenceKey;
+
+                if (contextChanged || (options && options.force)) {
+                    setSequenceContext(nextContext, { silent: options && options.silent });
+                    loadSequencePersistenceFromDisk(function () {
+                        callback(nextContext);
+                    });
+                } else {
+                    currentSequenceContext = nextContext;
+                    updateSequenceContextLabel();
+                    callback(nextContext);
+                }
+            });
+        }
+
+        function refreshMainTranscribeButton() {
+            var btn = document.getElementById("transcribeBtn");
+            if (!btn) {
+                return;
+            }
+
+            btn.classList.remove("is-busy", "is-ready");
+            btn.disabled = false;
+
+            if (!currentSequenceContext.hasSequence) {
+                btn.innerText = "NO SEQUENCE";
+                btn.disabled = true;
+                return;
+            }
+
+            if (isTranscriptionBusy()) {
+                btn.innerText = "TRANSCRIBING";
+                btn.classList.add("is-busy");
+            } else if (transcriptionState.status === "completed" && transcriptionState.persistenceStatus === "registered") {
+                btn.innerText = "TRANSCRIBE";
+                btn.classList.add("is-ready");
+            } else {
+                btn.innerText = "TRANSCRIBE";
+            }
+        }
+
+        function setTranscriptionState(nextState, options) {
+            var merged = normalizeTranscriptionState(transcriptionState);
+            var silent = options && options.silent;
+
+            for (var key in nextState) {
+                merged[key] = nextState[key];
+            }
+
+            if (currentSequenceContext.hasSequence) {
+                merged.sequenceId = currentSequenceContext.sequenceId;
+                merged.sequenceName = currentSequenceContext.sequenceName;
+                merged.sequenceKey = currentSequenceContext.sequenceKey;
+            }
+
+            merged.updatedAt = Date.now();
+            transcriptionState = normalizeTranscriptionState(merged);
+            persistTranscriptionState();
+            refreshMainTranscribeButton();
+
+            if (!silent) {
+                renderTranscriptionModal();
+            }
+        }
+
+        function getTranscriptionUiState() {
+            return JSON.parse(JSON.stringify(transcriptionState));
+        }
+
+        function escapeForEvalString(value) {
+            return JSON.stringify(String(value));
+        }
+
+        function normalizeCepPath(pathValue) {
+            var path = String(pathValue || "");
+
+            if (path.indexOf("file:///") === 0) {
+                path = path.replace("file:///", "");
+            } else if (path.indexOf("file://") === 0) {
+                path = path.replace("file://", "");
+            }
+
+            path = decodeURIComponent(path);
+            path = path.replace(/\//g, "\\");
+
+            return path;
+        }
+
+        function updateSequenceTranscriptionState(storageKey, nextState) {
+            var merged = normalizeTranscriptionState(getScopedTranscriptionState(storageKey));
+
+            for (var key in (nextState || {})) {
+                merged[key] = nextState[key];
+            }
+
+            merged = normalizeTranscriptionState(merged);
+            transcriptionStateBySequence[storageKey] = merged;
+            if (storageKey === currentSequenceContext.storageKey) {
+                transcriptionState = merged;
+                refreshMainTranscribeButton();
+                renderTranscriptionModal();
+            }
+        }
+
+        function finalizeCompletedTranscriptionPersistence(storageKey, completedState, previousState, statePath) {
+            cs.evalScript(
+                "registerCompletedTranscription(" + escapeForEvalString(JSON.stringify({
+                    statePath: statePath || completedState.statePath || "",
+                    sequenceId: completedState.sequenceId || previousState.sequenceId || "",
+                    sequenceName: completedState.sequenceName || previousState.sequenceName || "",
+                    sequenceKey: completedState.sequenceKey || previousState.sequenceKey || ""
+                })) + ")",
+                function (res) {
+                    var data = null;
+
+                    try {
+                        data = JSON.parse(res);
+                    } catch (e) {
+                        data = null;
+                    }
+
+                    if (!data || !data.ok || !data.transcriptionState) {
+                        var errorMessage = data && data.error
+                            ? data.error
+                            : "Finished transcription could not be registered into project storage.";
+                        updateSequenceTranscriptionState(storageKey, {
+                            status: "failed",
+                            statusLabel: "Failed",
+                            error: errorMessage,
+                            persistenceStatus: "failed"
+                        });
+                        if (storageKey === currentSequenceContext.storageKey) {
+                            log(errorMessage, "error");
+                        }
+                        return;
+                    }
+
+                    var persistedState = normalizeTranscriptionState(data.transcriptionState);
+                    persistedState.notificationShown = !!previousState.notificationShown;
+                    persistedState.persistenceStatus = "registered";
+                    updateSequenceTranscriptionState(storageKey, persistedState);
+                }
+            );
+        }
+
+        function pollSingleTranscriptionState(storageKey, statePath) {
+            cs.evalScript("getTranscriptionJobSnapshot(" + escapeForEvalString(statePath) + ")", function (res) {
+                if (!res || res === "EvalScript error.") {
+                    return;
+                }
+
+                var data = null;
+
+                try {
+                    data = JSON.parse(res);
+                } catch (e) {
+                    return;
+                }
+
+                if (!data || data.ok === false) {
+                    return;
+                }
+
+                var state = data.state || {};
+                if (!state.status) {
+                    return;
+                }
+
+                var previousState = getScopedTranscriptionState(storageKey);
+                var nextState = {
+                    status: state.status,
+                    statusLabel: state.statusLabel || state.status,
+                    jobId: state.jobId || previousState.jobId,
+                    statePath: previousState.statePath || statePath,
+                    sequenceId: state.sequenceId || previousState.sequenceId,
+                    sequenceName: state.sequenceName || previousState.sequenceName,
+                    sequenceKey: state.sequenceKey || previousState.sequenceKey,
+                    source: state.source || previousState.source,
+                    requestedLanguages: state.requestedLanguages || previousState.requestedLanguages,
+                    normalizedLanguages: state.normalizedLanguages || previousState.normalizedLanguages,
+                    processingDevice: state.processingDevice || previousState.processingDevice,
+                    resultJsonPath: state.resultJsonPath || "",
+                    resultSrtPath: state.resultSrtPath || "",
+                    activeTranscriptRecordId: previousState.activeTranscriptRecordId,
+                    manifestPath: previousState.manifestPath,
+                    storageRootPath: previousState.storageRootPath,
+                    audioPath: state.audioPath || previousState.audioPath,
+                    outputDir: state.outputDir || previousState.outputDir,
+                    workerStdoutPath: state.workerStdoutPath || previousState.workerStdoutPath,
+                    workerStderrPath: state.workerStderrPath || previousState.workerStderrPath,
+                    error: state.error || "",
+                    summary: state.summary || "",
+                    notificationShown: previousState.notificationShown,
+                    persistenceStatus: previousState.persistenceStatus || ""
+                };
+
+                if (state.status === "launching") {
+                    var updatedAt = Date.parse(state.updatedAt || "");
+                    if (updatedAt && (Date.now() - updatedAt) > 45000) {
+                        nextState.status = "failed";
+                        nextState.statusLabel = "Failed";
+                        nextState.error = "Transcription worker did not start correctly. Check worker-stderr.log in the current WHISPR job folder.";
+                    }
+                }
+
+                if (nextState.status === "completed" && nextState.jobId && !notifiedJobIds[nextState.jobId] && !previousState.notificationShown) {
+                    notifiedJobIds[nextState.jobId] = true;
+                    nextState.notificationShown = true;
+                    log("Transcription completed", "success");
+                } else if (nextState.status === "failed" && storageKey === currentSequenceContext.storageKey) {
+                    log(nextState.error || "Transcription failed", "error");
+                }
+
+                if (nextState.status === "completed" && nextState.resultJsonPath && nextState.persistenceStatus !== "registered") {
+                    nextState.persistenceStatus = "registering";
+                    updateSequenceTranscriptionState(storageKey, nextState);
+                    finalizeCompletedTranscriptionPersistence(storageKey, nextState, previousState, statePath);
+                    return;
+                }
+
+                updateSequenceTranscriptionState(storageKey, nextState);
+            });
+        }
+
+        function pollTranscriptionStateFile() {
+            var hasRunningJobs = false;
+
+            for (var storageKey in transcriptionStateBySequence) {
+                if (!transcriptionStateBySequence.hasOwnProperty(storageKey)) {
+                    continue;
+                }
+
+                var state = getScopedTranscriptionState(storageKey);
+                if (!state.statePath || !isBusyStatus(state.status)) {
+                    continue;
+                }
+
+                hasRunningJobs = true;
+                pollSingleTranscriptionState(storageKey, state.statePath);
+            }
+
+            if (!hasRunningJobs) {
+                stopTranscriptionPolling();
+            }
+        }
+
+        function ensureTranscriptionPolling() {
+            if (transcriptionPollTimer) {
+                return;
+            }
+
+            transcriptionPollTimer = setInterval(pollTranscriptionStateFile, 2000);
+        }
+
+        function hasRunningTranscriptionJobs() {
+            for (var storageKey in transcriptionStateBySequence) {
+                if (!transcriptionStateBySequence.hasOwnProperty(storageKey)) {
+                    continue;
+                }
+
+                var state = getScopedTranscriptionState(storageKey);
+                if (state.statePath && isBusyStatus(state.status)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function stopTranscriptionPolling() {
+            if (!transcriptionPollTimer) {
+                return;
+            }
+
+            clearInterval(transcriptionPollTimer);
+            transcriptionPollTimer = null;
+        }
+
+        function startSequenceContextPolling() {
+            if (sequencePollTimer) {
+                return;
+            }
+
+            sequencePollTimer = setInterval(function () {
+                syncCurrentSequenceContext(function () {}, { silent: false });
+            }, 1500);
+        }
+
+        function openTranscriptionWindow() {
+            isTranscriptionModalOpen = true;
+            syncCurrentSequenceContext(function () {
+                document.getElementById("transcribeModal").classList.remove("hidden");
+                renderTranscriptionModal();
+            }, { force: true, silent: false });
+        }
+
+        function closeTranscriptionWindow() {
+            if (isTranscriptionBusy()) {
+                log("Transcription continues in background.", "info");
+            }
+            isTranscriptionModalOpen = false;
+            document.getElementById("transcribeModal").classList.add("hidden");
+        }
+
+        function normalizeUiLanguages(languages) {
+            var mapped = [];
+            var seen = {};
+            var languageMap = {
+                slo: "sl",
+                cro: "hr",
+                srb: "sr"
+            };
+
+            for (var i = 0; i < languages.length; i++) {
+                var normalized = languageMap[String(languages[i] || "").toLowerCase()];
+                if (!normalized || seen[normalized]) {
+                    continue;
+                }
+                seen[normalized] = true;
+                mapped.push(normalized);
+            }
+
+            if (!mapped.length) {
+                mapped.push("sl");
+            }
+
+            return mapped;
+        }
+
+        function launchTranscriptionWorker(data) {
+            return launchBackgroundProcess("C:\\Windows\\System32\\cmd.exe", ["/c", data.launchCmdPath]);
+        }
+
+        function startTranscriptionJobFromPopup(config, callback) {
+            callback = callback || function () {};
+
+            if (!currentSequenceContext.hasSequence) {
+                callback({
+                    ok: false,
+                    message: "No active sequence."
+                });
+                return;
+            }
+
+            if (isTranscriptionBusy()) {
+                callback({
+                    ok: false,
+                    message: "A transcription job is already running."
+                });
+                return;
+            }
+
+            var options = {
+                source: config && config.source === "inout" ? "inout" : "entire",
+                processingDevice: config && config.processingDevice === "gpu" && gpuCapability.gpuCapable ? "gpu" : "cpu",
+                uiLanguages: config && config.languages ? config.languages : ["slo"],
+                languages: normalizeUiLanguages(config && config.languages ? config.languages : ["slo"]),
+                extensionPath: normalizeCepPath(cs.getSystemPath(SystemPath.EXTENSION))
+            };
+
+            setTranscriptionState({
+                status: "exporting",
+                statusLabel: "Exporting audio",
+                jobId: "",
+                statePath: "",
+                sequenceId: currentSequenceContext.sequenceId,
+                sequenceName: currentSequenceContext.sequenceName,
+                sequenceKey: currentSequenceContext.sequenceKey,
+                source: options.source,
+                processingDevice: options.processingDevice,
+                requestedLanguages: options.uiLanguages,
+                normalizedLanguages: options.languages,
+                resultJsonPath: "",
+                resultSrtPath: "",
+                activeTranscriptRecordId: "",
+                manifestPath: "",
+                storageRootPath: "",
+                audioPath: "",
+                outputDir: "",
+                error: "",
+                summary: "",
+                persistenceStatus: ""
+            });
+
+            log("Exporting timeline audio...", "info");
+
+            cs.evalScript("startTranscriptionJob(" + escapeForEvalString(JSON.stringify(options)) + ")", function (res) {
+                var data = null;
+
+                try {
+                    data = JSON.parse(res);
+                } catch (e) {
+                    data = {
+                        ok: false,
+                        error: "Invalid transcription bridge response"
+                    };
+                }
+
+                if (!data || !data.ok) {
+                    setTranscriptionState({
+                        status: "failed",
+                        statusLabel: "Failed",
+                        error: data && data.error ? data.error : "Failed to start transcription"
+                    });
+                    log(transcriptionState.error, "error");
+                    callback({
+                        ok: false,
+                        message: transcriptionState.error
+                    });
+                    return;
+                }
+
+                var launchResult = launchTranscriptionWorker(data);
+                if (!launchResult.ok) {
+                    setTranscriptionState({
+                        status: "failed",
+                        statusLabel: "Failed",
+                        error: launchResult.error || "Failed to launch transcription worker"
+                    });
+                    log(transcriptionState.error, "error");
+                    callback({
+                        ok: false,
+                        message: transcriptionState.error
+                    });
+                    return;
+                }
+
+                setTranscriptionState({
+                    status: data.status || "transcribing",
+                    statusLabel: data.statusLabel || "Transcribing",
+                    jobId: data.jobId,
+                    statePath: data.statePath,
+                    sequenceId: data.sequenceId || currentSequenceContext.sequenceId,
+                    sequenceName: data.sequenceName || "",
+                    sequenceKey: data.sequenceKey || currentSequenceContext.sequenceKey,
+                    source: data.source || options.source,
+                    processingDevice: data.processingDevice || options.processingDevice,
+                    requestedLanguages: data.requestedLanguages || options.uiLanguages,
+                    normalizedLanguages: data.normalizedLanguages || options.languages,
+                    audioPath: data.audioPath || "",
+                    outputDir: data.outputDir || "",
+                    workerStdoutPath: data.workerStdoutPath || "",
+                    workerStderrPath: data.workerStderrPath || "",
+                    error: "",
+                    persistenceStatus: ""
+                });
+
+                ensureTranscriptionPolling();
+                log("Transcription started", "info");
+
+                callback({
+                    ok: true,
+                    state: getTranscriptionUiState()
+                });
+            });
+        }
+
+        function createCaptionsFromPopup(styleObject, callback) {
+            callback = callback || function () {};
+
+            if (transcriptionState.status !== "completed") {
+                callback({
+                    ok: false,
+                    message: "Finish transcription first."
+                });
+                return;
+            }
+
+            log("Creating captions...", "info");
+
+            cs.evalScript(
+                "createCaptionsFromTranscription(" +
+                escapeForEvalString(JSON.stringify(transcriptionState)) + "," +
+                escapeForEvalString(JSON.stringify(styleObject || captionStyle)) + ")",
+                function (res) {
+                    var isError = !res || res.indexOf("ERROR") !== -1;
+                    log(res, isError ? "error" : "success");
+                    callback({
+                        ok: !isError,
+                        message: res
+                    });
+                }
+            );
+        }
+
+        function bootstrapTranscriptionState() {
+            applyCurrentSequenceState({ silent: true });
+            refreshMainTranscribeButton();
+            renderTranscriptionModal();
+            renderCaptionStyleControls();
+            startGpuCapabilityCheck();
+            syncCurrentSequenceContext(function () {}, { force: true, silent: false });
+            startSequenceContextPolling();
+
+            if (hasRunningTranscriptionJobs()) {
+                ensureTranscriptionPolling();
+                pollTranscriptionStateFile();
+            }
+        }
+
+        function getSelectedSource() {
+            return document.getElementById("sourceToggle").checked ? "entire" : "inout";
+        }
+
+        function getSelectedProcessingDevice() {
+            return document.getElementById("processingToggle").checked && gpuCapability.gpuCapable ? "gpu" : "cpu";
+        }
+
+        function getSelectedLanguages() {
+            var boxes = document.querySelectorAll('.language-choice input[type="checkbox"]');
+            var values = [];
+
+            for (var i = 0; i < boxes.length; i++) {
+                if (boxes[i].checked) {
+                    values.push(boxes[i].value);
+                }
+            }
+
+            if (!values.length) {
+                values.push("slo");
+            }
+
+            return values;
+        }
+
+        function renderLanguageControls() {
+            var boxes = document.querySelectorAll('.language-choice input[type="checkbox"]');
+            var selected = transcriptionState.requestedLanguages || ["slo"];
+            var selectedMap = {};
+
+            for (var i = 0; i < selected.length; i++) {
+                selectedMap[String(selected[i])] = true;
+            }
+
+            for (i = 0; i < boxes.length; i++) {
+                boxes[i].checked = !!selectedMap[boxes[i].value];
+            }
+        }
+
+        function handleSourceToggleChange() {
+            setTranscriptionState({
+                source: getSelectedSource()
+            }, { silent: false });
+            renderToggleStates();
+        }
+
+        function handleLanguageChange() {
+            var selected = getSelectedLanguages();
+            setTranscriptionState({
+                requestedLanguages: selected,
+                normalizedLanguages: normalizeUiLanguages(selected)
+            }, { silent: false });
+        }
+
+        function handleProcessingToggleChange() {
+            setTranscriptionState({
+                processingDevice: getSelectedProcessingDevice()
+            }, { silent: false });
+            renderGpuControls();
+        }
+
+        function setModalControlsDisabled(isDisabled) {
+            var sourceInput = document.getElementById("sourceToggle");
+            var langInputs = document.querySelectorAll('.language-choice input[type="checkbox"]');
+            var createBtn = document.getElementById("createCaptionsBtn");
+            var popupBtn = document.getElementById("popupTranscribeBtn");
+            var wordsInput = document.getElementById("wordsPerLine");
+            var closeBtn = document.getElementById("transcribeModalClose");
+            var processingToggle = document.getElementById("processingToggle");
+            var styleControls = document.querySelectorAll(".style-control, #maxLinesToggle");
+            var shouldDisable = isDisabled || !currentSequenceContext.hasSequence;
+            var i = 0;
+
+            if (sourceInput) {
+                sourceInput.disabled = shouldDisable;
+            }
+
+            for (i = 0; i < langInputs.length; i++) {
+                langInputs[i].disabled = shouldDisable;
+            }
+
+            if (processingToggle) {
+                processingToggle.disabled = shouldDisable || !gpuCapability.gpuCapable;
+            }
+
+            popupBtn.disabled = shouldDisable;
+            popupBtn.innerText = isDisabled ? "Transcribing..." : "Transcribe";
+            closeBtn.disabled = false;
+
+            for (i = 0; i < styleControls.length; i++) {
+                styleControls[i].disabled = shouldDisable || document.getElementById("captionMakerSection").classList.contains("disabled");
+            }
+
+            if (shouldDisable || document.getElementById("captionMakerSection").classList.contains("disabled")) {
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+            }
+        }
+
+        function renderTranscriptionModal() {
+            var modal = document.getElementById("transcribeModal");
+            var statusTitle = document.getElementById("jobStatusTitle");
+            var statusMeta = document.getElementById("jobStatusMeta");
+            var captionSection = document.getElementById("captionMakerSection");
+            var captionActionWrap = document.getElementById("captionActionWrap");
+            var captionLockOverlay = document.getElementById("captionLockOverlay");
+            var createBtn = document.getElementById("createCaptionsBtn");
+            var wordsInput = document.getElementById("wordsPerLine");
+            var sourceToggle = document.getElementById("sourceToggle");
+            var processingToggle = document.getElementById("processingToggle");
+            var sequenceLabel = document.getElementById("sequenceContextLabel");
+            if (!modal) {
+                return;
+            }
+            if (!isTranscriptionModalOpen) {
+                modal.classList.add("hidden");
+                return;
+            }
+            modal.classList.remove("hidden");
+            updateSequenceContextLabel();
+            if (sequenceLabel && !currentSequenceContext.hasSequence) {
+                sequenceLabel.innerText = "No active sequence";
+            }
+            if (sourceToggle) {
+                sourceToggle.checked = transcriptionState.source === "entire";
+            }
+            if (processingToggle) {
+                processingToggle.checked = transcriptionState.processingDevice === "gpu" && gpuCapability.gpuCapable;
+            }
+            renderLanguageControls();
+            renderCaptionStyleControls();
+            renderGpuControls();
+            renderToggleStates();
+            if (transcriptionState.status === "completed" && transcriptionState.persistenceStatus === "registered" && transcriptionState.resultJsonPath) {
+                setModalControlsDisabled(false);
+                captionSection.classList.remove("disabled");
+                if (captionActionWrap) {
+                    captionActionWrap.classList.remove("is-locked");
+                }
+                if (captionLockOverlay) {
+                    captionLockOverlay.classList.add("hidden");
+                }
+                createBtn.disabled = false;
+                wordsInput.disabled = false;
+                statusTitle.innerText = "Completed";
+                statusMeta.innerText = transcriptionState.sequenceName
+                    ? transcriptionState.sequenceName + " ready for captions."
+                    : "Transcription finished.";
+                return;
+            }
+            if (transcriptionState.status === "completed") {
+                setModalControlsDisabled(true);
+                captionSection.classList.add("disabled");
+                if (captionActionWrap) {
+                    captionActionWrap.classList.add("is-locked");
+                }
+                if (captionLockOverlay) {
+                    captionLockOverlay.classList.remove("hidden");
+                    captionLockOverlay.innerText = "Saving transcript for this sequence...";
+                }
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+                statusTitle.innerText = "Finalizing";
+                statusMeta.innerText = "Validating and registering the latest transcript for " + (transcriptionState.sequenceName || "this sequence") + ".";
+                return;
+            }
+            if (transcriptionState.status === "failed") {
+                setModalControlsDisabled(false);
+                captionSection.classList.add("disabled");
+                if (captionActionWrap) {
+                    captionActionWrap.classList.add("is-locked");
+                }
+                if (captionLockOverlay) {
+                    captionLockOverlay.classList.remove("hidden");
+                    captionLockOverlay.innerText = "Unlocks after successful transcription";
+                }
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+                statusTitle.innerText = "Failed";
+                statusMeta.innerText = transcriptionState.error || "Transcription failed.";
+                return;
+            }
+            if (transcriptionState.status === "exporting" || transcriptionState.status === "launching" || transcriptionState.status === "transcribing") {
+                setModalControlsDisabled(true);
+                captionSection.classList.add("disabled");
+                if (captionActionWrap) {
+                    captionActionWrap.classList.add("is-locked");
+                }
+                if (captionLockOverlay) {
+                    captionLockOverlay.classList.remove("hidden");
+                    captionLockOverlay.innerText = "Unlocks after successful transcription";
+                }
+                createBtn.disabled = true;
+                wordsInput.disabled = true;
+                statusTitle.innerText = transcriptionState.statusLabel || "Transcribing";
+                statusMeta.innerText = transcriptionState.sequenceName
+                    ? "Sequence: " + transcriptionState.sequenceName + " | Device: " + String(transcriptionState.processingDevice || "cpu").toUpperCase()
+                    : "Background transcription job is running.";
+                return;
+            }
+            setModalControlsDisabled(false);
+            captionSection.classList.add("disabled");
+            if (captionActionWrap) {
+                captionActionWrap.classList.add("is-locked");
+            }
+            if (captionLockOverlay) {
+                captionLockOverlay.classList.remove("hidden");
+                captionLockOverlay.innerText = "Unlocks after successful transcription";
+            }
+            createBtn.disabled = true;
+            wordsInput.disabled = true;
+            statusTitle.innerText = currentSequenceContext.hasSequence ? "Idle" : "No active sequence";
+            statusMeta.innerText = currentSequenceContext.hasSequence
+                ? "Choose source and languages, then start transcription."
+                : "Open a Premiere sequence to use Transcribe.";
+        }
+        function submitTranscription() {
+            syncCurrentSequenceContext(function () {
+                startTranscriptionJobFromPopup({
+                    source: getSelectedSource(),
+                    processingDevice: getSelectedProcessingDevice(),
+                    languages: getSelectedLanguages()
+                }, function (result) {
+                    renderTranscriptionModal();
+                    if (result && !result.ok) {
+                        alert(result.message || "Failed to start transcription.");
+                    }
+                });
+            });
+        }
+
+        function createCaptions() {
+            syncCurrentSequenceContext(function () {
+                createCaptionsFromPopup(captionStyle, function (result) {
+                    renderTranscriptionModal();
+                    if (!result || !result.ok) {
+                        alert(result && result.message ? result.message : "Failed to create captions.");
+                    }
+                });
+            });
+        }
+
+        document.getElementById("sourceToggle").addEventListener("change", handleSourceToggleChange);
+        document.getElementById("processingToggle").addEventListener("change", handleProcessingToggleChange);
+        document.getElementById("maxLinesToggle").addEventListener("change", handleMaxLinesToggleChange);
+        Array.prototype.forEach.call(document.querySelectorAll(".language-choice input[type='checkbox']"), function (control) {
+            control.addEventListener("change", handleLanguageChange);
+            control.addEventListener("input", handleLanguageChange);
+        });
+        Array.prototype.forEach.call(document.querySelectorAll(".style-control"), function (control) {
+            control.addEventListener("change", handleStyleInputChange);
+            control.addEventListener("input", handleStyleInputChange);
+        });
+
         loadJSX();
         checkForUpdates();
         updateSelectionDuration();
-        window.setInterval(updateSelectionDuration, 500);
+        setInterval(updateSelectionDuration, 500);
+        bootstrapTranscriptionState();
 
     </script>
-
 </body>
 </html>
+
+

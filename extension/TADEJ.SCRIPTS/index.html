@@ -138,7 +138,7 @@
 
         var cs = new CSInterface();
 
-        var CURRENT_VERSION = "1.14.0";
+        var CURRENT_VERSION = "1.16.0";
         var lastSelectionDuration = null;
         var TICKS_PER_SECOND = 254016000000;
         var SERVER_VERSION = null;
@@ -720,6 +720,15 @@
             return userDataPath + "\\TADEJ.SCRIPTS\\gpu_probe.json";
         }
 
+        function getInstallRootPath() {
+            var userDataPath = normalizeCepPath(cs.getSystemPath(SystemPath.USER_DATA));
+            return userDataPath.replace(/\\AppData\\Roaming$/i, "") + "\\aktual-premiere-tools";
+        }
+
+        function getWhisprRootPath() {
+            return getInstallRootPath() + "\\runtime\\whispr";
+        }
+
         function launchBackgroundProcess(commandPath, commandArgs) {
             if (!window.cep || !window.cep.process || !window.cep.process.createProcess) {
                 return {
@@ -807,7 +816,7 @@
         function startGpuCapabilityCheck() {
             var extensionPath = normalizeCepPath(cs.getSystemPath(SystemPath.EXTENSION));
             var probeScriptPath = extensionPath + "\\server\\gpu_probe.py";
-            var pythonPath = "C:\\Users\\Produkcija\\Documents\\TADEJ\\WHISPR\\.venv\\Scripts\\python.exe";
+            var pythonPath = getWhisprRootPath() + "\\.venv\\Scripts\\python.exe";
             var outputPath = getGpuProbePath();
             var cmdPath = "C:\\Windows\\System32\\cmd.exe";
 

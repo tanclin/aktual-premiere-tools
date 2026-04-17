@@ -74,8 +74,13 @@ def main() -> int:
     log_path = state_path.parent / "transcribe.log"
     languages = normalize_languages(args.languages)
     processing_device = "gpu" if str(args.processing_device).lower() == "gpu" else "cpu"
+    install_root = whispr_root.parent.parent
+    ffmpeg_bin_dir = install_root / "tools" / "ffmpeg" / "bin"
+    model_root = install_root / "models"
+    huggingface_root = model_root / "huggingface"
 
     output_dir.mkdir(parents=True, exist_ok=True)
+    huggingface_root.mkdir(parents=True, exist_ok=True)
     state = read_state(state_path)
     state.update(
         {
@@ -111,6 +116,12 @@ def main() -> int:
 
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
+    env["HF_HOME"] = str(huggingface_root)
+    env["HUGGINGFACE_HUB_CACHE"] = str(huggingface_root / "hub")
+    env["TRANSFORMERS_CACHE"] = str(huggingface_root / "transformers")
+    env["XDG_CACHE_HOME"] = str(model_root / ".cache")
+    if ffmpeg_bin_dir.exists():
+        env["PATH"] = str(ffmpeg_bin_dir) + os.pathsep + env.get("PATH", "")
     if processing_device == "cpu":
         env["CUDA_VISIBLE_DEVICES"] = "-1"
 

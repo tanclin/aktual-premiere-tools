@@ -707,6 +707,28 @@ function readTextFile(filePath) {
     return text;
 }
 
+function getWhisprRootPath() {
+    return getInstallRootPath() + "\\runtime\\whispr";
+}
+
+function getInstallRootPath() {
+    try {
+        var userDataFolder = Folder.userData;
+        if (userDataFolder && userDataFolder.parent && userDataFolder.parent.parent) {
+            return normalizeWindowsPath(userDataFolder.parent.parent.fsName + "\\aktual-premiere-tools");
+        }
+    } catch (e) {}
+
+    try {
+        var documentsFolder = Folder.myDocuments;
+        if (documentsFolder && documentsFolder.parent) {
+            return normalizeWindowsPath(documentsFolder.parent.fsName + "\\aktual-premiere-tools");
+        }
+    } catch (e) {}
+
+    return "C:\\Users\\Public\\aktual-premiere-tools";
+}
+
 function writeTextFile(filePath, contents) {
     var file = new File(filePath);
     file.encoding = "UTF-8";
@@ -1544,6 +1566,16 @@ function getActiveSequenceInfo() {
 }
 
 function findWavExportPreset(sequence) {
+    var bundledPreset = new File(getInstallRootPath() + "\\presets\\wav-transcribe.epr");
+    if (bundledPreset.exists) {
+        try {
+            var bundledExt = String(sequence.getExportFileExtension(bundledPreset.fsName) || "").toLowerCase();
+            if (bundledExt === "wav") {
+                return bundledPreset.fsName;
+            }
+        } catch (e) {}
+    }
+
     var docRoot = new Folder(Folder.myDocuments.fsName + "\\Adobe\\Adobe Media Encoder");
     if (!docRoot.exists) {
         return "";
@@ -1642,7 +1674,7 @@ function startTranscriptionJob(optionsJson) {
         var processingDevice = options.processingDevice === "gpu" ? "gpu" : "cpu";
         var normalizedLanguages = normalizeRequestedLanguages(options.languages || []);
         var extensionPath = normalizeWindowsPath(options.extensionPath || "");
-        var whisprRoot = "C:\\Users\\Produkcija\\Documents\\TADEJ\\WHISPR";
+        var whisprRoot = getWhisprRootPath();
         var pythonPath = whisprRoot + "\\.venv\\Scripts\\python.exe";
         var mainScriptPath = whisprRoot + "\\main.py";
         var bridgeScriptPath = extensionPath + "\\server\\transcribe_job.py";

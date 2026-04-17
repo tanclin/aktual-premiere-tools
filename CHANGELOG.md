@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.16.0 - feature
+
+- Rebuilt the installer into a distribution-minded bootstrap flow centered on `%USERPROFILE%\aktual-premiere-tools`, with predictable subfolders for plugin files, runtime, models, tools, presets, config, downloads, and temp data.
+- Added a new primary `install.bat` entrypoint and kept `installer.bat` as a backward-compatible wrapper.
+- The installer now downloads the public plugin zip, `premiereCSXS.reg`, and the WAV transcription preset, installs the CEP extension, provisions the bundled WHISPR runtime, creates a local venv, installs Python dependencies, downloads portable ffmpeg, and preloads the `large-v3` model into the central install root.
+- Updated the panel/JSX runtime paths so transcription now resolves its runtime from `%USERPROFILE%\aktual-premiere-tools\runtime\whispr` and prefers the centrally installed `wav-transcribe.epr` preset.
+- Removed generated zip and Python cache leftovers from the repo so distribution artifacts and runtime bytecode do not bloat source control.
+
+## 1.15.1 - fix
+
+- Removed the last hardcoded `C:\Users\Produkcija\...` WHISPR Python path from the panel-side GPU probe flow so a fresh install can resolve the bundled runtime from the current user's `Documents\TADEJ\WHISPR` folder.
+- Kept the JSX transcription bridge aligned with the same dynamic `Documents`-based runtime path so both install-time provisioning and runtime probing use the same portable location.
+
+## 1.15.0 - feature
+
+- Bundled the minimal WHISPR runtime source inside the extension package so transcription can be provisioned on a new machine.
+- Rebuilt `installer.bat` into a full bootstrap installer that installs the CEP extension, copies the WHISPR runtime into `Documents`, creates the Python virtualenv, installs Python dependencies, checks ffmpeg, and preloads the `large-v3` model.
+- Added packaging cleanup for Python cache folders so runtime leftovers do not leak into future releases.
+
 ## 1.14.0 - feature
 
 - Rewrote the sequence-specific transcription persistence layer to use a project-local manifest-backed transcript store with deterministic sequence keys, latest-valid transcript resolution, atomic transcript writes, completed-job registration, legacy transcript migration, and per-sequence caption-style persistence.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.16.7 - fix
+
+- Removed ExtendScript-unsafe Array `.indexOf()` calls from transcript manifest sequence alias handling and replaced them with an ES3-safe helper.
+- Re-normalized existing sequence manifest entries before alias updates so legacy manifest data cannot crash caption/transcript loading.
+
 ## 1.16.6 - fix
 
 - Hardened transcript manifest alias normalization so legacy or malformed `sequenceIds` / `sequenceNames` values no longer crash with `.indexOf is not a function`.

@@ -1040,6 +1040,21 @@ function normalizeStringArray(value) {
     return normalized;
 }
 
+function stringArrayContains(values, target) {
+    var targetText = String(target || "");
+    if (!values || !targetText) {
+        return false;
+    }
+
+    for (var i = 0; i < values.length; i++) {
+        if (String(values[i] || "") === targetText) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 function normalizeTranscriptSequenceEntry(entry, sequenceKey) {
     var normalized = entry || {};
     var aliases = normalized.aliases || {};
@@ -1094,7 +1109,7 @@ function rebuildTranscriptManifestAliases(manifest) {
         if (!aliases.bySequenceNameSlug[slug]) {
             aliases.bySequenceNameSlug[slug] = [];
         }
-        if (aliases.bySequenceNameSlug[slug].indexOf(sequenceKey) === -1) {
+        if (!stringArrayContains(aliases.bySequenceNameSlug[slug], sequenceKey)) {
             aliases.bySequenceNameSlug[slug].push(sequenceKey);
         }
     }
@@ -1150,14 +1165,14 @@ function ensureSequenceManifestEntry(manifest, sequenceInfo) {
         }, sequenceKey);
     }
 
-    var entry = manifest.sequences[sequenceKey];
+    var entry = normalizeTranscriptSequenceEntry(manifest.sequences[sequenceKey], sequenceKey);
     entry.sequenceName = sequenceInfo.sequenceName || entry.sequenceName || "";
     entry.sequenceNameSlug = sequenceInfo.sequenceNameSlug || entry.sequenceNameSlug || "";
 
-    if (sequenceInfo.sequenceId && entry.aliases.sequenceIds.indexOf(sequenceInfo.sequenceId) === -1) {
+    if (sequenceInfo.sequenceId && !stringArrayContains(entry.aliases.sequenceIds, sequenceInfo.sequenceId)) {
         entry.aliases.sequenceIds.push(sequenceInfo.sequenceId);
     }
-    if (sequenceInfo.sequenceName && entry.aliases.sequenceNames.indexOf(sequenceInfo.sequenceName) === -1) {
+    if (sequenceInfo.sequenceName && !stringArrayContains(entry.aliases.sequenceNames, sequenceInfo.sequenceName)) {
         entry.aliases.sequenceNames.push(sequenceInfo.sequenceName);
     }
 

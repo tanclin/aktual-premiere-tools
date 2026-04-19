@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.16.6 - fix
+
+- Hardened transcript manifest alias normalization so legacy or malformed `sequenceIds` / `sequenceNames` values no longer crash with `.indexOf is not a function`.
+- Made installer model preload rerun-safe: step `[14/15]` now checks for an existing `large-v3` cache or readiness marker before triggering the faster-whisper model download again.
+- Updated extension, manifest, and release metadata to `1.16.6`.
+
 ## 1.16.4 - fix
 
 - Removed the non-essential `install.bat` alias so the project now exposes only one installer entrypoint: `installer.bat`.

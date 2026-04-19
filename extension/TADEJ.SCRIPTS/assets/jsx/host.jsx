@@ -1002,6 +1002,44 @@ function normalizeTranscriptRecord(record) {
     };
 }
 
+function normalizeStringArray(value) {
+    var normalized = [];
+    var seen = {};
+    var i = 0;
+
+    function pushValue(candidate) {
+        var text = String(candidate || "");
+        if (!text || seen[text]) {
+            return;
+        }
+        seen[text] = true;
+        normalized.push(text);
+    }
+
+    if (value instanceof Array) {
+        for (i = 0; i < value.length; i++) {
+            pushValue(value[i]);
+        }
+        return normalized;
+    }
+
+    if (typeof value === "string" || typeof value === "number") {
+        pushValue(value);
+        return normalized;
+    }
+
+    if (value && typeof value === "object") {
+        for (var key in value) {
+            if (!value.hasOwnProperty(key)) {
+                continue;
+            }
+            pushValue(value[key]);
+        }
+    }
+
+    return normalized;
+}
+
 function normalizeTranscriptSequenceEntry(entry, sequenceKey) {
     var normalized = entry || {};
     var aliases = normalized.aliases || {};
@@ -1023,8 +1061,8 @@ function normalizeTranscriptSequenceEntry(entry, sequenceKey) {
         sequenceName: String(normalized.sequenceName || ""),
         sequenceNameSlug: String(normalized.sequenceNameSlug || normalizeSequenceNameSlug(normalized.sequenceName || "")),
         aliases: {
-            sequenceIds: aliases.sequenceIds instanceof Array ? aliases.sequenceIds : [],
-            sequenceNames: aliases.sequenceNames instanceof Array ? aliases.sequenceNames : []
+            sequenceIds: normalizeStringArray(aliases.sequenceIds),
+            sequenceNames: normalizeStringArray(aliases.sequenceNames)
         },
         latestValidRecordId: String(normalized.latestValidRecordId || ""),
         records: dedupedRecords

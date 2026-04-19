@@ -26,6 +26,7 @@ set "WAV_PRESET_FILE=%PRESETS_DIR%\wav-transcribe.epr"
 set "FFMPEG_ZIP=%DOWNLOADS_DIR%\ffmpeg-release-essentials.zip"
 set "PLUGIN_EXTRACT_DIR=%TEMP_DIR%\plugin_extract"
 set "FFMPEG_EXTRACT_DIR=%TEMP_DIR%\ffmpeg_extract"
+set "MODEL_READY_MARKER=%MODELS_DIR%\large-v3.ready"
 
 set "WHISPR_SOURCE=%PLUGIN_DIR%\server\whispr_runtime"
 set "VENV_DIR=%RUNTIME_ROOT%\.venv"
@@ -305,10 +306,21 @@ exit /b 0
 
 :preload_model
 echo [14/15] Downloading / validating transcription model cache...
+if exist "%MODEL_READY_MARKER%" (
+    echo Transcription model cache already marked ready.
+    exit /b 0
+)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$roots = @('%HF_HOME%','%HUGGINGFACE_HUB_CACHE%','%MODELS_DIR%') | Where-Object { $_ -and (Test-Path -LiteralPath $_) }; foreach ($root in $roots) { $model = Get-ChildItem -LiteralPath $root -Recurse -Filter 'model.bin' -ErrorAction SilentlyContinue | Where-Object { $_.FullName -match 'large-v3|faster-whisper-large-v3|Systran' } | Select-Object -First 1; if ($model) { exit 0 } }; exit 1"
+if not errorlevel 1 (
+    echo Existing large-v3 model cache found.
+    > "%MODEL_READY_MARKER%" echo large-v3 ready
+    exit /b 0
+)
 "%VENV_DIR%\Scripts\python.exe" -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', device='cpu', compute_type='int8'); print('large-v3 ready')" || (
     echo ERROR: Failed to preload the faster-whisper large-v3 model.
     exit /b 1
 )
+> "%MODEL_READY_MARKER%" echo large-v3 ready
 exit /b 0
 
 :verify_install

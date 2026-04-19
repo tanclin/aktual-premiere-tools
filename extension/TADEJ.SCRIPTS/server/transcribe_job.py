@@ -64,6 +64,8 @@ def main() -> int:
     parser.add_argument("--main-script", required=True)
     parser.add_argument("--languages", default="sl")
     parser.add_argument("--processing-device", default="cpu")
+    parser.add_argument("--task", choices=["transcribe", "translate"], default="transcribe")
+    parser.add_argument("--translation-target", default="en")
     args = parser.parse_args()
 
     state_path = Path(args.state_path)
@@ -74,6 +76,8 @@ def main() -> int:
     log_path = state_path.parent / "transcribe.log"
     languages = normalize_languages(args.languages)
     processing_device = "gpu" if str(args.processing_device).lower() == "gpu" else "cpu"
+    task = "translate" if str(args.task).lower() == "translate" else "transcribe"
+    translation_target = "en" if task == "translate" else ""
     install_root = whispr_root.parent.parent
     ffmpeg_bin_dir = install_root / "tools" / "ffmpeg" / "bin"
     model_root = install_root / "models"
@@ -91,6 +95,8 @@ def main() -> int:
             "outputDir": str(output_dir),
             "normalizedLanguages": languages,
             "processingDevice": processing_device,
+            "translationEnabled": task == "translate",
+            "translationTarget": translation_target,
             "startedAt": utc_now(),
         }
     )
@@ -108,6 +114,8 @@ def main() -> int:
         "--output-dir",
         str(output_dir),
     ]
+    if task == "translate":
+        command.extend(["--task", "translate"])
 
     if len(languages) == 1:
         command.extend(["--language", languages[0]])
@@ -185,6 +193,8 @@ def main() -> int:
             "resultSrtPath": str(result_srt_path) if result_srt_path.exists() else "",
             "summary": build_summary(result_json_path),
             "processingDevice": processing_device,
+            "translationEnabled": task == "translate",
+            "translationTarget": translation_target,
             "error": "",
             "finishedAt": utc_now(),
         }

@@ -992,7 +992,10 @@ function normalizeTranscriptRecord(record) {
         sequenceKey: String(normalized.sequenceKey || ""),
         sequenceNameSlug: String(normalized.sequenceNameSlug || ""),
         source: String(normalized.source || "entire"),
+        sourceStartSeconds: Number(normalized.sourceStartSeconds) || 0,
         processingDevice: String(normalized.processingDevice || "cpu"),
+        translationEnabled: !!normalized.translationEnabled,
+        translationTarget: String(normalized.translationTarget || ""),
         summary: String(normalized.summary || ""),
         language: String(normalized.language || ""),
         durationSeconds: Number(normalized.durationSeconds) || 0,
@@ -1354,7 +1357,10 @@ function registerLegacyTranscriptIfPresent(storeInfo, manifest, sequenceInfo) {
             sequenceKey: sequenceInfo.sequenceKey,
             sequenceNameSlug: sequenceInfo.sequenceNameSlug,
             source: legacyPayload.transcriptionState && legacyPayload.transcriptionState.source ? legacyPayload.transcriptionState.source : "entire",
+            sourceStartSeconds: Number(legacyPayload.transcriptionState && legacyPayload.transcriptionState.sourceStartSeconds) || 0,
             processingDevice: legacyPayload.transcriptionState && legacyPayload.transcriptionState.processingDevice ? legacyPayload.transcriptionState.processingDevice : "cpu",
+            translationEnabled: !!(legacyPayload.transcriptionState && legacyPayload.transcriptionState.translationEnabled),
+            translationTarget: legacyPayload.transcriptionState && legacyPayload.transcriptionState.translationTarget ? legacyPayload.transcriptionState.translationTarget : "",
             transcriptSrtPath: "",
             jobStatePath: legacy.statePath
         };
@@ -1381,7 +1387,10 @@ function registerLegacyTranscriptIfPresent(storeInfo, manifest, sequenceInfo) {
             sequenceKey: sequenceInfo.sequenceKey,
             sequenceNameSlug: sequenceInfo.sequenceNameSlug,
             source: storedPayload._aktualTranscript.source,
+            sourceStartSeconds: Number(storedPayload._aktualTranscript.sourceStartSeconds) || 0,
             processingDevice: storedPayload._aktualTranscript.processingDevice,
+            translationEnabled: !!storedPayload._aktualTranscript.translationEnabled,
+            translationTarget: storedPayload._aktualTranscript.translationTarget || "",
             summary: legacyPayload.transcriptionState && legacyPayload.transcriptionState.summary ? legacyPayload.transcriptionState.summary : buildTranscriptionSummary(validation.data),
             language: validation.data.language || "",
             durationSeconds: Number(validation.data.duration_seconds) || 0,
@@ -1440,7 +1449,10 @@ function recoverManifestEntryFromStoredFiles(storeInfo, manifest, sequenceInfo) 
             sequenceKey: metadata.sequenceKey || sequenceInfo.sequenceKey,
             sequenceNameSlug: metadata.sequenceNameSlug || sequenceInfo.sequenceNameSlug,
             source: metadata.source || "entire",
+            sourceStartSeconds: Number(metadata.sourceStartSeconds) || 0,
             processingDevice: metadata.processingDevice || "cpu",
+            translationEnabled: !!metadata.translationEnabled,
+            translationTarget: metadata.translationTarget || "",
             summary: buildTranscriptionSummary(validation.data),
             language: validation.data.language || "",
             durationSeconds: Number(validation.data.duration_seconds) || 0,
@@ -1463,9 +1475,12 @@ function buildCompletedTranscriptionState(record, sequenceInfo, storeInfo) {
         sequenceName: sequenceInfo.sequenceName,
         sequenceKey: sequenceInfo.sequenceKey,
         source: record.source || "entire",
+        sourceStartSeconds: Number(record.sourceStartSeconds) || 0,
         processingDevice: record.processingDevice || "cpu",
         requestedLanguages: ["slo"],
         normalizedLanguages: [],
+        translationEnabled: !!record.translationEnabled,
+        translationTarget: record.translationTarget || "en",
         resultJsonPath: record.transcriptJsonPath,
         resultSrtPath: record.transcriptSrtPath || "",
         activeTranscriptRecordId: record.recordId,
@@ -1725,6 +1740,8 @@ function startTranscriptionJob(optionsJson) {
         var options = parseJsonText(optionsJson) || {};
         var sourceMode = options.source === "inout" ? "inout" : "entire";
         var processingDevice = options.processingDevice === "gpu" ? "gpu" : "cpu";
+        var translationEnabled = !!options.translationEnabled;
+        var translationTarget = options.translationTarget === "en" ? "en" : "en";
         var normalizedLanguages = normalizeRequestedLanguages(options.languages || []);
         var extensionPath = normalizeWindowsPath(options.extensionPath || "");
         var whisprRoot = getWhisprRootPath();
@@ -1753,12 +1770,14 @@ function startTranscriptionJob(optionsJson) {
             return '{"ok":false,"error":"No WAV export preset found in Adobe Media Encoder presets"}';
         }
 
+        var sourceStartSeconds = 0;
         if (sourceMode === "inout") {
             var inPoint = Number(sequence.getInPoint());
             var outPoint = Number(sequence.getOutPoint());
             if (!(outPoint > inPoint)) {
                 return '{"ok":false,"error":"Set a valid sequence In-Out range first"}';
             }
+            sourceStartSeconds = Math.max(0, inPoint || 0);
         }
 
         var jobsRoot = whisprRoot + "\\jobs";
@@ -1784,7 +1803,10 @@ function startTranscriptionJob(optionsJson) {
             status: "launching",
             statusLabel: "Transcribing",
             source: sourceMode,
+            sourceStartSeconds: sourceStartSeconds,
             processingDevice: processingDevice,
+            translationEnabled: translationEnabled,
+            translationTarget: translationTarget,
             sequenceName: sequence.name,
             sequenceId: sequence.sequenceID,
             requestedLanguages: options.uiLanguages || [],
@@ -1811,6 +1833,8 @@ function startTranscriptionJob(optionsJson) {
                 " --main-script " + shellQuoteWindowsPath(mainScriptPath) +
                 " --languages " + shellQuoteWindowsPath(normalizedLanguages.join(",")) +
                 " --processing-device " + shellQuoteWindowsPath(processingDevice) +
+                " --task " + shellQuoteWindowsPath(translationEnabled ? "translate" : "transcribe") +
+                " --translation-target " + shellQuoteWindowsPath(translationTarget) +
                 " 1>" + shellQuoteWindowsPath(stdoutPath) +
                 " 2>" + shellQuoteWindowsPath(stderrPath)
         ]);
@@ -1825,7 +1849,10 @@ function startTranscriptionJob(optionsJson) {
             sequenceId: sequence.sequenceID,
             sequenceKey: sequenceInfo.sequenceKey,
             source: sourceMode,
+            sourceStartSeconds: sourceStartSeconds,
             processingDevice: processingDevice,
+            translationEnabled: translationEnabled,
+            translationTarget: translationTarget,
             requestedLanguages: options.uiLanguages || [],
             normalizedLanguages: normalizedLanguages,
             audioPath: audioPath,
@@ -1966,7 +1993,10 @@ function registerCompletedTranscription(payloadJson) {
             sequenceKey: sequenceInfo.sequenceKey,
             sequenceNameSlug: sequenceInfo.sequenceNameSlug,
             source: state.source || "entire",
+            sourceStartSeconds: Number(state.sourceStartSeconds) || 0,
             processingDevice: state.processingDevice || "cpu",
+            translationEnabled: !!state.translationEnabled,
+            translationTarget: state.translationTarget || "",
             transcriptSrtPath: "",
             jobStatePath: payload.statePath
         };
@@ -1998,7 +2028,10 @@ function registerCompletedTranscription(payloadJson) {
             sequenceKey: sequenceInfo.sequenceKey,
             sequenceNameSlug: sequenceInfo.sequenceNameSlug,
             source: state.source || "entire",
+            sourceStartSeconds: Number(state.sourceStartSeconds) || 0,
             processingDevice: state.processingDevice || "cpu",
+            translationEnabled: !!state.translationEnabled,
+            translationTarget: state.translationTarget || "",
             summary: state.summary || buildTranscriptionSummary(validation.data),
             language: validation.data.language || "",
             durationSeconds: Number(validation.data.duration_seconds) || 0,
@@ -2338,6 +2371,9 @@ function createCaptionsFromTranscription(stateJson, styleJson) {
             );
             if (resolvedPersistence.ok && resolvedPersistence.foundTranscript && resolvedPersistence.transcriptionState) {
                 resultJsonPath = resolvedPersistence.transcriptionState.resultJsonPath || "";
+                state.sourceStartSeconds = Number(resolvedPersistence.transcriptionState.sourceStartSeconds) || 0;
+                state.translationEnabled = !!resolvedPersistence.transcriptionState.translationEnabled;
+                state.translationTarget = resolvedPersistence.transcriptionState.translationTarget || "";
                 if (!state.sequenceKey) {
                     state.sequenceKey = resolvedPersistence.transcriptionState.sequenceKey || "";
                 }
@@ -2446,10 +2482,11 @@ function createCaptionsFromTranscription(stateJson, styleJson) {
         }
 
         var created = false;
+        var captionStartAt = Math.max(0, Number(state.sourceStartSeconds) || 0);
         try {
-            created = activeSequence.createCaptionTrack(captionItem, 0, Sequence.CAPTION_FORMAT_SUBTITLE);
+            created = activeSequence.createCaptionTrack(captionItem, captionStartAt, Sequence.CAPTION_FORMAT_SUBTITLE);
         } catch (e) {
-            created = activeSequence.createCaptionTrack(captionItem, 0);
+            created = activeSequence.createCaptionTrack(captionItem, captionStartAt);
         }
 
         if (!created) {
@@ -2459,6 +2496,7 @@ function createCaptionsFromTranscription(stateJson, styleJson) {
         return "Captions created" +
             "\nWords per line: " + normalizedWordsPerLine +
             "\nMax lines: " + normalizedStyle.layout.maxLinesPerCaption +
+            "\nTimeline start: " + formatSrtTimestamp(captionStartAt) +
             "\nSRT: " + captionsPath +
             "\nImport source: " + importPath +
             "\nStyle JSON: " + stylePath +

@@ -76,6 +76,23 @@
                 </div>
 
                 <div class="transcribe-section">
+                    <div class="section-title">Translation</div>
+                    <div class="toggle-field">
+                        <span class="toggle-side-label" id="translationLabelLeft">Original</span>
+                        <label class="switch">
+                            <input id="translationToggle" type="checkbox">
+                            <span class="slider round"></span>
+                        </label>
+                        <span class="toggle-side-label" id="translationLabelRight">Translate</span>
+                    </div>
+                    <label class="input-label" for="translationTarget">Translate to</label>
+                    <select id="translationTarget" class="select-input">
+                        <option value="en">English</option>
+                    </select>
+                    <div class="hint-text">WHISPR currently supports direct translation to English.</div>
+                </div>
+
+                <div class="transcribe-section">
                     <div class="section-title">Processing</div>
                     <div class="toggle-field">
                         <span class="toggle-side-label" id="processingLabelLeft">CPU</span>
@@ -138,7 +155,7 @@
 
         var cs = new CSInterface();
 
-        var CURRENT_VERSION = "1.16.7";
+        var CURRENT_VERSION = "1.17.0";
         var lastSelectionDuration = null;
         var TICKS_PER_SECOND = 254016000000;
         var SERVER_VERSION = null;
@@ -409,9 +426,12 @@
                 sequenceName: "",
                 sequenceKey: "",
                 source: "inout",
+                sourceStartSeconds: 0,
                 processingDevice: "gpu",
                 requestedLanguages: ["slo"],
                 normalizedLanguages: ["sl"],
+                translationEnabled: false,
+                translationTarget: "en",
                 resultJsonPath: "",
                 resultSrtPath: "",
                 activeTranscriptRecordId: "",
@@ -461,7 +481,10 @@
             normalized.sequenceName = normalized.sequenceName ? String(normalized.sequenceName) : "";
             normalized.sequenceKey = normalized.sequenceKey ? String(normalized.sequenceKey) : "";
             normalized.source = normalized.source === "entire" ? "entire" : "inout";
+            normalized.sourceStartSeconds = Math.max(0, Number(normalized.sourceStartSeconds) || 0);
             normalized.processingDevice = normalized.processingDevice === "gpu" ? "gpu" : "cpu";
+            normalized.translationEnabled = !!normalized.translationEnabled;
+            normalized.translationTarget = normalized.translationTarget === "en" ? "en" : "en";
             normalized.requestedLanguages = Array.isArray(normalized.requestedLanguages) && normalized.requestedLanguages.length
                 ? normalized.requestedLanguages
                 : ["slo"];
@@ -633,10 +656,12 @@
             var sourceLabelRight = document.getElementById("sourceLabelRight");
             var maxLinesToggle = document.getElementById("maxLinesToggle");
             var processingToggle = document.getElementById("processingToggle");
+            var translationToggle = document.getElementById("translationToggle");
             var toggleFields = [
                 { toggle: sourceToggle, offLabel: sourceLabelLeft, onLabel: sourceLabelRight },
                 { toggle: maxLinesToggle, offLabel: document.querySelector(".compact-toggle .toggle-side-label:first-child"), onLabel: document.querySelector(".compact-toggle .toggle-side-label:last-child") },
-                { toggle: processingToggle, offLabel: document.getElementById("processingLabelLeft"), onLabel: document.getElementById("processingLabelRight") }
+                { toggle: processingToggle, offLabel: document.getElementById("processingLabelLeft"), onLabel: document.getElementById("processingLabelRight") },
+                { toggle: translationToggle, offLabel: document.getElementById("translationLabelLeft"), onLabel: document.getElementById("translationLabelRight") }
             ];
             var i = 0;
 
@@ -1121,9 +1146,12 @@
                     sequenceName: state.sequenceName || previousState.sequenceName,
                     sequenceKey: state.sequenceKey || previousState.sequenceKey,
                     source: state.source || previousState.source,
+                    sourceStartSeconds: typeof state.sourceStartSeconds !== "undefined" ? state.sourceStartSeconds : previousState.sourceStartSeconds,
                     requestedLanguages: state.requestedLanguages || previousState.requestedLanguages,
                     normalizedLanguages: state.normalizedLanguages || previousState.normalizedLanguages,
                     processingDevice: state.processingDevice || previousState.processingDevice,
+                    translationEnabled: typeof state.translationEnabled === "boolean" ? state.translationEnabled : previousState.translationEnabled,
+                    translationTarget: state.translationTarget || previousState.translationTarget,
                     resultJsonPath: state.resultJsonPath || "",
                     resultSrtPath: state.resultSrtPath || "",
                     activeTranscriptRecordId: previousState.activeTranscriptRecordId,
@@ -1299,6 +1327,8 @@
                 processingDevice: config && config.processingDevice === "gpu" && gpuCapability.gpuCapable ? "gpu" : "cpu",
                 uiLanguages: config && config.languages ? config.languages : ["slo"],
                 languages: normalizeUiLanguages(config && config.languages ? config.languages : ["slo"]),
+                translationEnabled: !!(config && config.translationEnabled),
+                translationTarget: config && config.translationTarget === "en" ? "en" : "en",
                 extensionPath: normalizeCepPath(cs.getSystemPath(SystemPath.EXTENSION))
             };
 
@@ -1311,9 +1341,12 @@
                 sequenceName: currentSequenceContext.sequenceName,
                 sequenceKey: currentSequenceContext.sequenceKey,
                 source: options.source,
+                sourceStartSeconds: 0,
                 processingDevice: options.processingDevice,
                 requestedLanguages: options.uiLanguages,
                 normalizedLanguages: options.languages,
+                translationEnabled: options.translationEnabled,
+                translationTarget: options.translationTarget,
                 resultJsonPath: "",
                 resultSrtPath: "",
                 activeTranscriptRecordId: "",
@@ -1378,9 +1411,12 @@
                     sequenceName: data.sequenceName || "",
                     sequenceKey: data.sequenceKey || currentSequenceContext.sequenceKey,
                     source: data.source || options.source,
+                    sourceStartSeconds: data.sourceStartSeconds || 0,
                     processingDevice: data.processingDevice || options.processingDevice,
                     requestedLanguages: data.requestedLanguages || options.uiLanguages,
                     normalizedLanguages: data.normalizedLanguages || options.languages,
+                    translationEnabled: typeof data.translationEnabled === "boolean" ? data.translationEnabled : options.translationEnabled,
+                    translationTarget: data.translationTarget || options.translationTarget,
                     audioPath: data.audioPath || "",
                     outputDir: data.outputDir || "",
                     workerStdoutPath: data.workerStdoutPath || "",
@@ -1450,6 +1486,15 @@
             return document.getElementById("processingToggle").checked && gpuCapability.gpuCapable ? "gpu" : "cpu";
         }
 
+        function getSelectedTranslationConfig() {
+            var toggle = document.getElementById("translationToggle");
+            var target = document.getElementById("translationTarget");
+            return {
+                enabled: !!(toggle && toggle.checked),
+                target: target && target.value === "en" ? "en" : "en"
+            };
+        }
+
         function getSelectedLanguages() {
             var boxes = document.querySelectorAll('.language-choice input[type="checkbox"]');
             var values = [];
@@ -1481,6 +1526,20 @@
             }
         }
 
+        function renderTranslationControls() {
+            var toggle = document.getElementById("translationToggle");
+            var target = document.getElementById("translationTarget");
+
+            if (toggle) {
+                toggle.checked = !!transcriptionState.translationEnabled;
+            }
+
+            if (target) {
+                target.value = transcriptionState.translationTarget || "en";
+                target.disabled = !transcriptionState.translationEnabled || isTranscriptionBusy() || !currentSequenceContext.hasSequence;
+            }
+        }
+
         function handleSourceToggleChange() {
             setTranscriptionState({
                 source: getSelectedSource()
@@ -1493,6 +1552,14 @@
             setTranscriptionState({
                 requestedLanguages: selected,
                 normalizedLanguages: normalizeUiLanguages(selected)
+            }, { silent: false });
+        }
+
+        function handleTranslationChange() {
+            var translation = getSelectedTranslationConfig();
+            setTranscriptionState({
+                translationEnabled: translation.enabled,
+                translationTarget: translation.target
             }, { silent: false });
         }
 
@@ -1511,6 +1578,8 @@
             var wordsInput = document.getElementById("wordsPerLine");
             var closeBtn = document.getElementById("transcribeModalClose");
             var processingToggle = document.getElementById("processingToggle");
+            var translationToggle = document.getElementById("translationToggle");
+            var translationTarget = document.getElementById("translationTarget");
             var styleControls = document.querySelectorAll(".style-control, #maxLinesToggle");
             var shouldDisable = isDisabled || !currentSequenceContext.hasSequence;
             var i = 0;
@@ -1525,6 +1594,12 @@
 
             if (processingToggle) {
                 processingToggle.disabled = shouldDisable || !gpuCapability.gpuCapable;
+            }
+            if (translationToggle) {
+                translationToggle.disabled = shouldDisable;
+            }
+            if (translationTarget) {
+                translationTarget.disabled = shouldDisable || !transcriptionState.translationEnabled;
             }
 
             popupBtn.disabled = shouldDisable;
@@ -1552,6 +1627,7 @@
             var wordsInput = document.getElementById("wordsPerLine");
             var sourceToggle = document.getElementById("sourceToggle");
             var processingToggle = document.getElementById("processingToggle");
+            var translationToggle = document.getElementById("translationToggle");
             var sequenceLabel = document.getElementById("sequenceContextLabel");
             if (!modal) {
                 return;
@@ -1571,7 +1647,11 @@
             if (processingToggle) {
                 processingToggle.checked = transcriptionState.processingDevice === "gpu" && gpuCapability.gpuCapable;
             }
+            if (translationToggle) {
+                translationToggle.checked = !!transcriptionState.translationEnabled;
+            }
             renderLanguageControls();
+            renderTranslationControls();
             renderCaptionStyleControls();
             renderGpuControls();
             renderToggleStates();
@@ -1663,7 +1743,9 @@
                 startTranscriptionJobFromPopup({
                     source: getSelectedSource(),
                     processingDevice: getSelectedProcessingDevice(),
-                    languages: getSelectedLanguages()
+                    languages: getSelectedLanguages(),
+                    translationEnabled: getSelectedTranslationConfig().enabled,
+                    translationTarget: getSelectedTranslationConfig().target
                 }, function (result) {
                     renderTranscriptionModal();
                     if (result && !result.ok) {
@@ -1686,6 +1768,8 @@
 
         document.getElementById("sourceToggle").addEventListener("change", handleSourceToggleChange);
         document.getElementById("processingToggle").addEventListener("change", handleProcessingToggleChange);
+        document.getElementById("translationToggle").addEventListener("change", handleTranslationChange);
+        document.getElementById("translationTarget").addEventListener("change", handleTranslationChange);
         document.getElementById("maxLinesToggle").addEventListener("change", handleMaxLinesToggleChange);
         Array.prototype.forEach.call(document.querySelectorAll(".language-choice input[type='checkbox']"), function (control) {
             control.addEventListener("change", handleLanguageChange);

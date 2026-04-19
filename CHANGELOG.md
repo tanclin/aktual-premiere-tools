@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.0 - feature
+
+- Fixed In-Out caption placement by carrying the exported range start through transcription persistence and inserting imported captions at the original sequence In point instead of `00:00:00`.
+- Added a Translation section to the Transcribe window with an Original/Translate toggle and target language dropdown; the current WHISPR backend supports translation to English.
+
 ## 1.16.7 - fix
 
 - Removed ExtendScript-unsafe Array `.indexOf()` calls from transcript manifest sequence alias handling and replaced them with an ES3-safe helper.

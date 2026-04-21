@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.17.1 - fix
+
+- Hardened installer Python bootstrap so step `[9/15]` no longer depends on the Microsoft Store winget source.
+- Python install now uses `winget --source winget` first and falls back to a direct Python.org 3.11 installer if winget fails.
+
 ## 1.17.0 - feature
 
 - Fixed In-Out caption placement by carrying the exported range start through transcription persistence and inserting imported captions at the original sequence In point instead of `00:00:00`.

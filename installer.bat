@@ -6,6 +6,7 @@ set "GITHUB_RELEASE_ZIP=https://github.com/tanclin/aktual-premiere-tools/release
 set "GITHUB_REG_URL=https://raw.githubusercontent.com/tanclin/aktual-premiere-tools/main/premiereCSXS.reg"
 set "GITHUB_WAV_PRESET_URL=https://raw.githubusercontent.com/tanclin/aktual-premiere-tools/main/wav.epr"
 set "FFMPEG_ZIP_URL=https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+set "PYTHON_INSTALLER_URL=https://www.python.org/ftp/python/3.11.9/python-3.11.9-amd64.exe"
 
 set "INSTALL_ROOT=%USERPROFILE%\aktual-premiere-tools"
 set "DOWNLOADS_DIR=%INSTALL_ROOT%\downloads"
@@ -24,6 +25,7 @@ set "RELEASE_ZIP=%DOWNLOADS_DIR%\TADEJ.SCRIPTS.zip"
 set "REG_FILE=%CONFIG_DIR%\premiereCSXS.reg"
 set "WAV_PRESET_FILE=%PRESETS_DIR%\wav-transcribe.epr"
 set "FFMPEG_ZIP=%DOWNLOADS_DIR%\ffmpeg-release-essentials.zip"
+set "PYTHON_INSTALLER=%DOWNLOADS_DIR%\python-3.11.9-amd64.exe"
 set "PLUGIN_EXTRACT_DIR=%TEMP_DIR%\plugin_extract"
 set "FFMPEG_EXTRACT_DIR=%TEMP_DIR%\ffmpeg_extract"
 set "MODEL_READY_MARKER=%MODELS_DIR%\large-v3.ready"
@@ -187,7 +189,11 @@ call :set_python_cmd "python"
 if not errorlevel 1 goto :python_ok
 
 echo Python 3.10+ was not found. Trying to install Python 3.11 via winget...
-call :install_with_winget "Python.Python.3.11" "Python 3.11" || exit /b 1
+call :install_with_winget "Python.Python.3.11" "Python 3.11"
+if errorlevel 1 (
+    echo winget install failed. Trying direct Python.org installer fallback...
+    call :install_python_from_python_org || exit /b 1
+)
 
 call :set_python_cmd "py -3.11"
 if not errorlevel 1 goto :python_ok
@@ -196,6 +202,8 @@ if not errorlevel 1 goto :python_ok
 call :set_python_cmd "py -3"
 if not errorlevel 1 goto :python_ok
 call :set_python_cmd "python"
+if not errorlevel 1 goto :python_ok
+call :set_python_cmd "%LOCALAPPDATA%\Programs\Python\Python311\python.exe"
 if not errorlevel 1 goto :python_ok
 
 echo ERROR: Python 3.10+ is still unavailable after install.
@@ -398,9 +406,20 @@ if errorlevel 1 (
     echo ERROR: winget is not available, so %~2 could not be installed automatically.
     exit /b 1
 )
-winget install -e --id %~1 --accept-package-agreements --accept-source-agreements --silent
+winget install -e --id %~1 --source winget --accept-package-agreements --accept-source-agreements --silent
 if errorlevel 1 (
     echo ERROR: Failed to install %~2 via winget.
+    exit /b 1
+)
+exit /b 0
+
+:install_python_from_python_org
+echo Downloading Python 3.11 installer from python.org...
+call :download_file "%PYTHON_INSTALLER_URL%" "%PYTHON_INSTALLER%" "Python 3.11 installer" || exit /b 1
+echo Installing Python 3.11 for current user...
+"%PYTHON_INSTALLER%" /quiet InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_pip=1 Include_test=0 SimpleInstall=1
+if errorlevel 1 (
+    echo ERROR: Python.org installer failed.
     exit /b 1
 )
 exit /b 0

@@ -155,7 +155,7 @@
 
         var cs = new CSInterface();
 
-        var CURRENT_VERSION = "1.17.1";
+        var CURRENT_VERSION = "1.17.2";
         var lastSelectionDuration = null;
         var TICKS_PER_SECOND = 254016000000;
         var SERVER_VERSION = null;
@@ -173,6 +173,9 @@
         var captionLayoutBySequence = loadStateMap(CAPTION_LAYOUT_STORAGE_KEY);
         var transcriptionState = buildDefaultTranscriptionState();
         var captionStyle = buildDefaultCaptionLayoutState();
+        var jsxReady = false;
+        var jsxLoadInFlight = false;
+        var jsxLastLoadAttemptAt = 0;
 
         function log(msg, type) {
             var el = document.getElementById("log");
@@ -199,15 +202,43 @@
 
         function loadJSX() {
             try {
+                if (jsxLoadInFlight) {
+                    return;
+                }
+
+                var now = Date.now();
+                if (now - jsxLastLoadAttemptAt < 1500) {
+                    return;
+                }
+                jsxLastLoadAttemptAt = now;
+                jsxLoadInFlight = true;
+
                 var path = cs.getSystemPath(SystemPath.EXTENSION);
                 path = path.replace(/\\/g, "/");
 
                 var jsxPath = path + "/assets/jsx/host.jsx";
 
-                cs.evalScript('$.evalFile("' + jsxPath + '")', function () {
-                    log("JSX READY", "success");
+                cs.evalScript('$.evalFile("' + jsxPath + '")', function (res) {
+                    if (!res || res === "EvalScript error.") {
+                        jsxReady = false;
+                        jsxLoadInFlight = false;
+                        log("JSX LOAD FAILED. Check CEP console + Premiere ExtendScript. (" + String(res || "no response") + ")", "error");
+                        return;
+                    }
+
+                    cs.evalScript("typeof getActiveSequenceInfo", function (typeRes) {
+                        jsxReady = String(typeRes || "").toLowerCase() === "function";
+                        jsxLoadInFlight = false;
+                        if (jsxReady) {
+                            log("JSX READY", "success");
+                        } else {
+                            log("JSX LOADED, BUT API MISSING (getActiveSequenceInfo).", "error");
+                        }
+                    });
                 });
             } catch (e) {
+                jsxReady = false;
+                jsxLoadInFlight = false;
                 log("LOAD ERROR: " + e, "error");
             }
         }
@@ -952,9 +983,21 @@
         function syncCurrentSequenceContext(callback, options) {
             callback = callback || function () {};
 
+            if (!jsxReady) {
+                loadJSX();
+            }
+
             cs.evalScript("getActiveSequenceInfo()", function (res) {
                 var data = null;
                 var nextContext = buildDefaultSequenceContext();
+
+                if (!res || res === "EvalScript error.") {
+                    jsxReady = false;
+                    loadJSX();
+                    updateSequenceContextLabel();
+                    callback(nextContext);
+                    return;
+                }
 
                 try {
                     data = JSON.parse(res);
@@ -964,6 +1007,9 @@
 
                 if (data && data.ok && data.hasSequence) {
                     nextContext = normalizeSequenceContext(data);
+                } else if (data && data.ok === false) {
+                    jsxReady = false;
+                    loadJSX();
                 }
 
                 var contextChanged = nextContext.storageKey !== currentSequenceContext.storageKey ||

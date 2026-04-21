@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<ExtensionManifest Version="7.0" ExtensionBundleId="com.tadej.scripts" ExtensionBundleVersion="1.17.1">
+<ExtensionManifest Version="7.0" ExtensionBundleId="com.tadej.scripts" ExtensionBundleVersion="1.17.2">
 
     <ExtensionList>
         <Extension Id="com.tadej.scripts.panel"/>

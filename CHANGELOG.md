@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.17.2 - fix
+
+- Fixed false “No Sequence” on some machines by making JSX loading verifiable and re-trying on `EvalScript error.` instead of reporting `JSX READY` unconditionally.
+
 ## 1.17.1 - fix
 
 - Hardened installer Python bootstrap so step `[9/15]` no longer depends on the Microsoft Store winget source.
